@@ -130,6 +130,50 @@ class GameEnvironmentTest(unittest.TestCase):
             subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True)
             self.assertEqual(target.read_text(), "general")
 
+    def test_a_hybrid_dxvk_keeps_each_half_on_the_build_that_owns_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            component_dir = home / ".local/share/droiddeck-components"
+            base = root / "proton"
+            arch = base / "files/lib/wine/dxvk/aarch64-windows"
+            component_dir.mkdir(parents=True)
+            arch.mkdir(parents=True)
+            (base / "version").write_text("1 build-1\n")
+            halves = {
+                "d3d9.dll": "d3d9 of 1.7.2",
+                "dxgi.dll": "dxgi of 2.7.1",
+                "d3d11.dll": "d3d11 of 2.7.1",
+                "d3d10core.dll": "d3d10core of 2.7.1",
+            }
+            sources = {}
+            for name, text in halves.items():
+                source = root / name
+                source.write_text(text)
+                sources[name] = source
+            for name in list(halves) + ["d3d8.dll", "d3d10.dll", "d3d10_1.dll"]:
+                (arch / name).write_text("shipped")
+            rows = "".join(
+                "*\tproton\tbuild-1\tdxvk\tfiles/lib/wine/dxvk/aarch64-windows/%s\t%s\t%s\n"
+                % (name, hashlib.sha256(path.read_bytes()).hexdigest(), path)
+                for name, path in sources.items()
+            ) + "".join(
+                "*\tproton\tbuild-1\tdxvk\tfiles/lib/wine/dxvk/aarch64-windows/%s\t-\t-\n" % name
+                for name in ("d3d8.dll", "d3d10.dll", "d3d10_1.dll")
+            )
+            (component_dir / "desired.tsv").write_text(rows)
+            script = COMPAT["BL_COMPONENTS_SETUP"] + '\nverb=waitforexitandrun; bl_components "$1"\n'
+            env = dict(os.environ, HOME=str(home), STEAM_COMPAT_DATA_PATH="/steam/compatdata/42")
+            subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True)
+            for name, text in halves.items():
+                self.assertEqual((arch / name).read_text(), text, name)
+            for name in ("d3d8.dll", "d3d10.dll", "d3d10_1.dll"):
+                self.assertFalse((arch / name).exists(), name)
+
+            subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True, capture_output=True)
+            for name, text in halves.items():
+                self.assertEqual((arch / name).read_text(), text, name)
+
     def test_component_scope_matches_environment_scope_for_shortcut_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -150,6 +150,7 @@ fun ComponentsPage(
     onRefresh: () -> Unit,
     onImport: () -> Unit,
     onBack: () -> Unit,
+    onHybrid: (Boolean) -> Unit = {},
     games: List<Library.SteamGame> = emptyList(),
     generalFexPreset: String = "",
     onGeneralFexPreset: (String) -> Unit = {},
@@ -609,6 +610,10 @@ fun ComponentsPage(
                 }
                 else -> {
                     SmallButton(stringResource(R.string.comp_import_wcp), onClick = onImport)
+                    if (l == "dxvk") {
+                        SmallButton(stringResource(R.string.comp_hybrid_legacy9), enabled = busy == null) { onHybrid(false) }
+                        SmallButton(stringResource(R.string.comp_hybrid_modern9), enabled = busy == null) { onHybrid(true) }
+                    }
                     val st = compState(l)
                     val p = view?.proton
                     val build = p?.let { ComponentsManager.safeName(it.version) }

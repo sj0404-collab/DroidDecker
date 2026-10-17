@@ -8,6 +8,7 @@ import com.droiddeck.launcher.core.Downloader
 import com.droiddeck.launcher.core.FileUtils
 import com.droiddeck.launcher.core.GameEnvironment
 import com.droiddeck.launcher.gpu.GpuInfo
+import com.droiddeck.launcher.gpu.VulkanInfo
 import com.droiddeck.launcher.runtime.LinuxRuntime
 import com.github.luben.zstd.ZstdInputStream
 import com.github.luben.zstd.ZstdOutputStream
@@ -923,6 +924,117 @@ object ComponentsManager {
         cached: () -> List<CatalogItem>,
         refresh: () -> List<CatalogItem>,
     ): CatalogItem? = catalogMatch(cached(), file, release) ?: catalogMatch(refresh(), file, release)
+
+    private fun unpackWcp(wcp: File, dest: File): Set<String> {
+        val rels = LinkedHashSet<String>()
+        readWcp(wcp) { tar ->
+            while (true) {
+                val e = tar.nextTarEntry ?: break
+                val rel = normalize(e.name)
+                if (e.isDirectory || !rel.startsWith("files/") || rel.split('/').any { it == ".." }) continue
+                val out = File(dest, rel)
+                out.parentFile?.mkdirs()
+                FileOutputStream(out).use { tar.copyTo(it) }
+                rels += rel
+            }
+        }
+        return rels
+    }
+
+    private fun storedPackage(context: Context, file: String): File {
+        val wcp = File(packagesDir(context), safeName(file))
+        if (wcp.isFile && runCatching { packageInfo(context, wcp) }.isSuccess) return wcp
+        wcp.delete()
+        val item = catalogItem(context, file, DxvkHybrid.RELEASE)
+            ?: error("$file is not in the Nightlies listing")
+        return File(packagesDir(context), safeName(download(context, item) {}.file))
+    }
+
+    /**
+     * Composes the hybrid's two builds into one DXVK package, each half taken whole from the build
+     * that owns it. The result is an ordinary stored package, so it swaps into a Proton, follows a
+     * game's profile and restores to the Proton's original like any other one.
+     */
+    fun hybrid(context: Context, spec: DxvkHybrid.Spec, rebuild: Boolean = false): Package = synchronized(lock) {
+        val dest = File(packagesDir(context), safeName(spec.file))
+        if (dest.isFile && !rebuild) {
+            val existing = runCatching { packageInfo(context, dest) }.getOrNull()
+            if (existing != null) return existing
+        }
+        dest.delete()
+        val work = File(dataDir(context), "hybrid-${System.nanoTime()}")
+        try {
+            val dirs = spec.sources.associateWith { File(work, safeName(it)) }
+            val contents = dirs.mapValues { (name, dir) -> unpackWcp(storedPackage(context, name), dir) }
+            val plan = DxvkHybrid.plan(spec) { contents.getValue(it) }
+            check(plan.foreign.isEmpty()) { "${spec.file} would leave out ${plan.foreign.joinToString(", ")}" }
+            check(plan.taken.isNotEmpty()) { "neither build of ${spec.file} has DXVK DLLs" }
+            val rels = plan.taken.keys.sorted()
+            val staged = File(work, "staged")
+            for (rel in rels) {
+                val out = File(staged, rel)
+                out.parentFile?.mkdirs()
+                File(dirs.getValue(plan.taken.getValue(rel)), rel).copyTo(out, overwrite = true)
+            }
+            val profile = JSONObject()
+                .put("type", TYPE_OF.getValue(DxvkHybrid.COMP))
+                .put("versionName", spec.version)
+                .put("versionCode", 0)
+                .put("description", spec.description)
+                .put("files", JSONArray(rels.map { JSONObject().put("source", it).put("target", "\${proton}/$it") }))
+            writeWcp(dest, profile, staged, rels)
+            Log.i(TAG, "built ${dest.name}: ${plan.taken.size} DLL(s), ${plan.borrowed.size} borrowed, ${plan.absent.size} left to Wine")
+        } finally {
+            work.deleteRecursively()
+        }
+        packageInfo(context, dest)
+    }
+
+    /** The hybrid this phone's own Vulkan driver can carry, whichever way round it is asked for. */
+    fun hybridForDevice(context: Context, reversed: Boolean): DxvkHybrid.Spec {
+        val caps = DxvkHybrid.Caps.of(VulkanInfo.query())
+        return DxvkHybrid.forDriver(caps, reversed) ?: error(
+            context.getString(
+                when (caps.block) {
+                    DxvkHybrid.Caps.Block.NO_API -> R.string.cmgr_hybrid_no_api
+                    DxvkHybrid.Caps.Block.NO_BC -> R.string.cmgr_hybrid_no_bc
+                    null -> R.string.cmgr_hybrid_none
+                },
+            ),
+        )
+    }
+
+    fun applyHybrid(context: Context, spec: DxvkHybrid.Spec, protonId: String? = null, rebuild: Boolean = false): String = synchronized(lock) {
+        val pkg = hybrid(context, spec, rebuild)
+        val id = protonId ?: protons(context).firstOrNull()?.id ?: error(context.getString(R.string.comp_no_proton_short))
+        swap(context, id, pkg.file)
+    }
+
+    fun ensureMaliHybrid(context: Context): String? = ensureMaliHybrid(
+        context, GpuInfo.detect(), DxvkHybrid.Caps.of(VulkanInfo.query()),
+        { spec -> hybrid(context, spec) },
+        { id, file -> swap(context, id, file) },
+    )
+
+    internal fun ensureMaliHybrid(
+        context: Context,
+        gpu: GpuInfo,
+        caps: DxvkHybrid.Caps,
+        build: (DxvkHybrid.Spec) -> Package,
+        apply: (protonId: String, file: String) -> String,
+    ): String? {
+        if (!gpu.mali) return null
+        val spec = DxvkHybrid.forDriver(caps)
+            ?: return caps.block?.let { "${LABEL.getValue(DxvkHybrid.COMP)} hybrid skipped: ${it.label}" }
+        val state = loadState(context)
+        val targets = protons(context).filter { p ->
+            val active = state.optJSONObject("active")?.optJSONObject(p.id)?.optJSONObject(DxvkHybrid.COMP)
+            forcedPackageWanted(active?.optString("file"), active?.optString("protonVersion") == p.version)
+        }
+        if (targets.isEmpty()) return null
+        val pkg = build(spec)
+        return targets.joinToString("; ") { apply(it.id, pkg.file) }
+    }
 
     fun download(context: Context, item: CatalogItem, progress: (Int) -> Unit): Package {
         require(item.url.startsWith("https://github.com/$NIGHTLIES/releases/download/")) { context.getString(R.string.cmgr_nightlies_only) }

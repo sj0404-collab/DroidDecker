@@ -334,6 +334,9 @@ class SessionService : Service() {
             runCatching { ComponentsManager.ensureForcedPackages(this) }
                 .onSuccess { if (it != null) Log.i(TAG, it) }
                 .onFailure { Log.w(TAG, "forced components", it) }
+            runCatching { ComponentsManager.ensureMaliHybrid(this) }
+                .onSuccess { if (it != null) Log.i(TAG, it) }
+                .onFailure { Log.w(TAG, "Mali DXVK hybrid", it) }
         }
         addClientEnvironment(guest, steamHere)
         if (steamHere) guest.add("BL_EPIC_APP_ID=" + com.droiddeck.launcher.stores.epic.EpicClient.shortcutAppId)

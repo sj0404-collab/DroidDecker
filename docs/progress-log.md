@@ -7,6 +7,41 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: one DXVK install, each half from the build that owns it
+
+- **The split** (`DxvkHybrid`): DXVK's own PE import graph keeps two halves apart - D3D8/D3D9
+  (`d3d8`, `d3d9`) and DXGI/D3D10/D3D11 (`dxgi`, `d3d11`, `d3d10core`, `d3d10`, `d3d10_1`). Nothing
+  crosses between them, and every crossing inside one (d3d8 → `Direct3DCreate9`, d3d10/d3d10_1 →
+  `D3D10CoreCreateDevice`, d3d10core → `D3D11CoreCreateDevice`, d3d11 → `CreateDXGIFactory1`) is a
+  documented export. Read off the shipped DLLs of 1.7.2, 1.10.3, 2.7.1 and 3.1.1. vkd3d-proton's
+  `d3d12` imports neither half, so a DX12 game is untouched by the split.
+- **Both directions on the components page:** old D3D9 + new D3D11 (DXVK 1.7.2 for the fast half,
+  the newest build the driver can create for the accurate one) and the reverse. Each is built into
+  an ordinary stored `.wcp` (`dxvk-hybrid-d3d9-1.7.2+d3d11-2.7.1.wcp`), so it swaps into a Proton,
+  follows one game's profile and restores to the Proton's original like any other package.
+- **What a half's build does not ship** is left out and Wine's own builtin serves that API (2.x has
+  no `d3d10`/`d3d10_1`, 1.x has no `d3d8`): six deletion rows beside the fourteen DLL rows.
+  `overlay` borrows such a DLL from the other build instead - implemented and tested, not in the UI.
+- **Mali** (`GpuInfo.mali`, families `MALI_5TH` / `MALI_VALHALL` / `MALI_BIFROST` / `MALI_UNKNOWN`):
+  Mali and Immortalis GPUs are recognised by name, HAL and vendor property, carry their model
+  (G720 → 720) and stay UNSUPPORTED with their own text - the guest driver is Turnip for Adreno
+  (#218), so this is the hybrid for the day a PanVK guest lands, and lets a Mali user build one by
+  hand now. Before a launch `ensureMaliHybrid` puts it on every Proton still on its shipped copy,
+  exactly like `ensureForcedPackages` does for Adreno 6xx.
+- **The driver decides** (`DxvkHybrid.Caps`): `textureCompressionBC` gates every build (all four
+  sources require it), 1.x needs Vulkan 1.1, 2.x needs 1.3 plus robustness2, 2.7 adds maintenance5,
+  3.x maintenance6 and load_store_op_none - `vkinfo` now reports those four extensions. A vendor
+  Mali driver (1.3.247, no BC, no robustness2) runs no build at all and is told why rather than
+  guessed at.
+- **While a game runs:** the hybrid goes through `swap`, so it queues and lands at the next launch -
+  mapped DLLs cannot change under a running process. `desired.tsv` is re-verified per file before
+  every launch, so each half stays on the build that owns it.
+- Docs: `docs/development/dxvk-hybrid-mali.md`. Tests: `DxvkHybridTest` (halves, naming, caps and
+  blocks, plans in both directions, overlay, a foreign DLL, the built bytes, rebuild, both packages
+  side by side, swap, a per-game profile, the Mali hook and its refusals), `GpuDetectionTest` (Mali
+  names, families, support text), `test_game_environment.py` (a hybrid's rows applied in the guest,
+  a second launch a no-op). Not yet on a device.
+
 ## 2026-10-10 - `feat/wincomp-auto-sources`: Windows components picked by the game's source
 
 - **Per source** (`WinCompSources`): Steam - Steamworks Shared depots from the appmanifest or the
