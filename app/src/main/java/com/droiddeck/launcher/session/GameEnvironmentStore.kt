@@ -2,6 +2,7 @@ package com.droiddeck.launcher.session
 
 import android.content.Context
 import android.util.AtomicFile
+import com.droiddeck.launcher.core.DxvkTuning
 import com.droiddeck.launcher.core.GameEnvironment
 import com.droiddeck.launcher.core.TextureFiltering
 import com.droiddeck.launcher.runtime.LinuxRuntime
@@ -13,6 +14,7 @@ object GameEnvironmentStore {
     private const val GUEST_FILE = "root/.config/droiddeck/game-environment.json"
     const val DXVK_CONFIG = "dxvkConfig"
     const val DXVK_CONFIG_GAMES = "dxvkConfigGames"
+    const val DXVK_PROFILE = "dxvkProfile"
 
     @Synchronized
     fun read(context: Context): GameEnvironment.Config {
@@ -102,6 +104,8 @@ object GameEnvironmentStore {
             )
         }
         if (gameDxvk.length() > 0) json.put(DXVK_CONFIG_GAMES, gameDxvk)
+        val profile = DxvkTuning.profile(context)
+        if (profile.isNotEmpty()) json.put(DXVK_PROFILE, profile)
         write(File(LinuxRuntime.rootDir(context), GUEST_FILE), json.toString())
     }
 

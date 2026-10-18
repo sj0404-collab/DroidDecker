@@ -269,6 +269,33 @@ class GameEnvironmentTest(unittest.TestCase):
                 MODULE["apply_config"](env, {"version": 1, "shared": entries}, "42")
             self.assertEqual(env, {"ORIGINAL": "unchanged"})
 
+    def test_a_device_profile_is_prepended_so_anything_else_wins(self):
+        config = {"version": 1, "shared": {}, "games": {},
+                  "dxvkProfile": "dxgi.maxFrameLatency = 1", "dxvkConfig": "d3d9.samplerAnisotropy = 16"}
+        own = {"DXVK_CONFIG": "dxvk.maxFrameRate = 60; "}
+        self.assertEqual(
+            MODULE["apply_config"](own, config, "42")["DXVK_CONFIG"],
+            "dxgi.maxFrameLatency = 1; dxvk.maxFrameRate = 60; d3d9.samplerAnisotropy = 16",
+        )
+        self.assertEqual(MODULE["apply_config"]({}, config, "42")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; d3d9.samplerAnisotropy = 16")
+
+    def test_a_per_game_dxvk_config_still_beats_the_profile(self):
+        config = {"version": 1, "shared": {}, "games": {}, "dxvkProfile": "dxgi.maxFrameLatency = 1",
+                  "dxvkConfig": "d3d9.samplerAnisotropy = 16",
+                  "dxvkConfigGames": {"42": "dxgi.maxFrameLatency = 2"}}
+        self.assertEqual(MODULE["apply_config"]({}, config, "42")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; dxgi.maxFrameLatency = 2")
+        self.assertEqual(MODULE["apply_config"]({}, config, "43")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; d3d9.samplerAnisotropy = 16")
+
+    def test_an_empty_profile_is_silent_and_an_invalid_one_is_refused(self):
+        config = {"version": 1, "shared": {}, "games": {}, "dxvkProfile": ""}
+        self.assertNotIn("DXVK_CONFIG", MODULE["apply_config"]({}, config, "42"))
+        for bad in (42, "a\0b", "x" * 8193):
+            with self.assertRaises(ValueError):
+                MODULE["apply_config"]({}, {**config, "dxvkProfile": bad}, "42")
+
     def test_texture_filtering_is_appended_to_dxvk_config(self):
         options = "d3d9.samplerAnisotropy = 16; d3d11.samplerAnisotropy = 16"
         config = {"version": 1, "shared": {}, "games": {}, "dxvkConfig": options}

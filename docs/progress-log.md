@@ -7,6 +7,30 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: what DXVK is told on a Mali device
+
+- **Why:** a hybrid answers D3D9 with 1.7.2 and D3D11 with a newer build, and both read the same
+  `DXVK_CONFIG`, so a tuning profile may only use keys all four shipped versions understand. Checked
+  against the `dxvk.conf` of 1.7.2, 1.10.3, 2.7.1 and 3.1.1: 25 options are common. `dxgi.tearFree`
+  and `dxgi.numBackBuffers` stop at 1.x, `dxvk.allowFse` starts at 2.7.1, `d3d9.samplerLodBias`
+  starts at 2.7.1 - none of them are used.
+- **`DxvkTuning`** (new, `core/`) emits six options about latency and stalls, not the picture: one
+  queued frame per swapchain for both halves (`d3d9`/`dxgi.maxFrameLatency = 1`), two shader compiler
+  threads where there are cores to spare, and "video memory" set to a quarter of unified RAM, clamped
+  to 1024-4096 MiB, so a single game cannot push the phone into swap. `d3d11.maxTessFactor` and
+  `d3d11.relaxedBarriers` are deliberately not defaults: they change what is drawn or trade
+  correctness for speed, so they stay per-game choices.
+- **Where it lands:** published as `dxvkProfile` in `game-environment.json` and applied by
+  `apply_config` in the guest script, ahead of the player's own `DXVK_CONFIG` and ahead of the texture
+  filtering options - DXVK keeps the last value for a key, so both of those still win. Per game,
+  `dxvkConfigGames` beats `dxvkConfig` as before. An empty profile is silent; an invalid one raises
+  like every other value in that file.
+- Tests: `DxvkTuningTest` (6) asserts the emitted key list, the latency, the thread and memory maths,
+  the Mali gate and the absence of every picture-changing key; `test_game_environment.py` (3 more,
+  58 total locally, `OK`) covers the precedence, the per-game case and the refusal cases.
+- Not verified on a device: the numbers are a starting point derived from how the guest and DXVK read
+  their configuration, not from measurements on Mali hardware.
+
 ## 2026-10-18 - `feat/dxvk-hybrid-mali`: the guest driver decides what the hybrid can be
 
 - **Seen in the code:** the hybrid read the phone's own Vulkan report, so on Mali it always answered

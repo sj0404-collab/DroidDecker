@@ -94,6 +94,31 @@ Which driver the guest has is read at runtime, not asked for: the bundle the use
 chosen by GPU as well - `pickIcd` prefers `panfrost` on Mali and `radv` on Xclipse instead of always
 taking `freedreno`, which is Turnip's, and falls back to Venus and then to the first manifest.
 
+## The DXVK options a Mali device starts from
+
+The guest reads one `DXVK_CONFIG` for both halves of a hybrid, so a tuning profile may only use keys
+every build in the pair understands. Of the four versions DroidDeck ships (1.7.2, 1.10.3, 2.7.1,
+3.1.1) only 25 options are common to all; `dxgi.tearFree` and `dxgi.numBackBuffers` stop at 1.x,
+`dxvk.allowFse` starts at 2.7.1, and `d3d9.samplerLodBias` starts at 2.7.1, so none of them are used.
+
+`DxvkTuning.maliOptions` emits six, all about latency and stalls rather than the picture:
+
+| Option | Value | Why on Mali |
+| --- | --- | --- |
+| `d3d9.maxFrameLatency`, `dxgi.maxFrameLatency` | 1 | the phone's compositor already queues a frame; a second one in DXVK is what makes touch feel behind the picture |
+| `dxvk.numCompilerThreads` | 2 (1 below four cores) | compiling shaders on every core starves the game thread and heats the phone out of its boost clock, which reads as stutter |
+| `dxgi.maxDeviceMemory`, `dxgi.maxSharedMemory`, `d3d9.maxAvailableMemory` | a quarter of RAM, 1024-4096 MiB | memory is unified; a generous guess lets one game push the phone into swap, which arrives as a freeze |
+
+Left out on purpose: `d3d11.maxTessFactor` and `d3d11.relaxedBarriers` change what is drawn or trade
+correctness for speed, so they belong in the per-game configuration, where a player picks them for one
+game, and `dxvk.hud` is a diagnostic rather than a default.
+
+Precedence follows the existing texture-filtering mechanism and is set in
+`tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env: apply_config`: the profile is laid down
+first, then the player's own `DXVK_CONFIG`, then the texture filtering choices from the UI - and DXVK
+keeps the last value for a key, so both of those override the profile. Per game, `dxvkConfigGames`
+still wins over `dxvkConfig`, profile included.
+
 ## Mali
 
 Mali hardware has no BC texture unit, and the vendor driver reports no `VK_EXT_robustness2`. A real
@@ -187,11 +212,12 @@ the safer default and what the two buttons build. The overlay is for a game that
 | Composing the `.wcp`, swapping it, the Mali rule | `session/ComponentsManager.kt` (`hybrid`, `hybridForDevice`, `applyHybrid`, `ensureMaliHybrid`) |
 | Mali families, model, name and the ICD it wants | `gpu/GpuInfo.kt` |
 | Guest driver profiles | `session/DxvkHybrid.kt` (`Guest`, `Caps.forGuest`) |
+| Mali DXVK tuning profile | `core/DxvkTuning.kt`, published by `session/GameEnvironmentStore.kt`, applied by `tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env` |
 | Picking the guest's ICD manifest | `runtime/LinuxRuntime.java` (`vulkanIcd`, `pickIcd`) |
 | The extra extension probes | `cpp/deviceinfo/vkinfo.c` |
 | The two buttons | `ui/ComponentsPage.kt`, wired in `MainActivity.kt` |
 | The launch hook | `session/SessionService.kt`, beside `ensureForcedPackages` |
-| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt`, `test/.../runtime/GuestIcdTest.kt` |
+| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt`, `test/.../runtime/GuestIcdTest.kt`, `test/.../core/DxvkTuningTest.kt`, `tools/tests/test_game_environment.py` |
 | Test of the rows landing in the guest | `tools/tests/test_game_environment.py` |
 
 The composed package uses the same layout as a downloaded one (`profile.json` with `type`
