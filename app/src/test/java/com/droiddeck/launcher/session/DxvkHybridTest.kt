@@ -245,7 +245,8 @@ class DxvkHybridTest {
         val caps = DxvkHybrid.Caps.of(panvkMaintenance5)
         assertNull(ComponentsManager.ensureMaliHybrid(context, adreno(740), caps, { error("built") }, { _, _ -> error("applied") }))
         assertEquals(
-            "DXVK hybrid skipped: the driver has no BC textures, which every DXVK build requires",
+            "DXVK hybrid skipped (guest driver the phone's own): the driver has no BC textures, " +
+                "which every DXVK build requires",
             ComponentsManager.ensureMaliHybrid(context, mali(720), DxvkHybrid.Caps.of(maliVendorReport), { error("built") }, { _, _ -> error("applied") }),
         )
     }
@@ -265,6 +266,61 @@ class DxvkHybridTest {
     @Test fun aDeviceWithoutAVulkanReportIsRefusedRatherThanGuessed() {
         val failure = assertThrows(IllegalStateException::class.java) { ComponentsManager.hybridForDevice(context, false) }
         assertTrue(failure.message, failure.message!!.isNotEmpty())
+    }
+
+    @Test fun theGuestDriverDecidesWhatDxvkCanDoNotThePhonesOwnHal() {
+        val host = DxvkHybrid.Caps.of(maliVendorReport)
+        assertEquals(DxvkHybrid.Caps.Block.NO_BC, host.block)
+
+        val caps = DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.PANVK_KBASE, host)
+        assertNull(caps.block)
+        assertEquals("dxvk-2.6.2-linux.wcp", caps.newest()?.file)
+        assertEquals(DxvkHybrid.Spec(DxvkHybrid.FAST, "dxvk-2.6.2-linux.wcp"), DxvkHybrid.forDriver(caps))
+    }
+
+    @Test fun aGuestWhoseRobustness2IsNotProvenKeepsTheLegacyAccurateHalf() {
+        val host = DxvkHybrid.Caps.of(maliVendorReport)
+        for (guest in listOf(DxvkHybrid.Guest.PANVK_JM, DxvkHybrid.Guest.PANVK_G710, DxvkHybrid.Guest.VKBRIDGE)) {
+            assertEquals(guest.name, "dxvk-1.10.3-linux.wcp", DxvkHybrid.Caps.forGuest(guest, host).newest()?.file)
+        }
+        assertEquals("dxvk-2.6.2-linux.wcp", DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.PANVK_G720, host).newest()?.file)
+        assertEquals("dxvk-2.6.2-linux.wcp", DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.PANVK_FAUX123, host).newest()?.file)
+    }
+
+    @Test fun venusKeepsTheHostFormatsButLosesRobustness2() {
+        val full = DxvkHybrid.Caps.of(panvkFull)
+        assertEquals("dxvk-3.1.1-linux.wcp", full.newest()?.file)
+        val venus = DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.VENUS, full)
+        assertFalse(venus.robustness2)
+        assertEquals("dxvk-1.10.3-linux.wcp", venus.newest()?.file)
+        assertEquals(
+            DxvkHybrid.Caps.Block.NO_BC,
+            DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.VENUS, DxvkHybrid.Caps.of(maliVendorReport)).block,
+        )
+    }
+
+    @Test fun aDriverThatIsNotProfiledKeepsThePhonesReport() {
+        val host = DxvkHybrid.Caps.of(panvkMaintenance5)
+        assertEquals(host, DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.TURNIP, host))
+        assertEquals(host, DxvkHybrid.Caps.forGuest(null, host))
+        assertEquals(host, DxvkHybrid.Caps.forGuest(DxvkHybrid.Guest.of("something-nobody-profiled"), host))
+    }
+
+    @Test fun driverIdsBundleTagsAndIcdNamesAllNameTheirGuest() {
+        assertEquals(DxvkHybrid.Guest.PANVK_KBASE, DxvkHybrid.Guest.of("PanVK-Mali-kbase"))
+        assertEquals(DxvkHybrid.Guest.PANVK_KBASE, DxvkHybrid.Guest.of("panvk-kbase-v0.1.0-rc3-lowmem"))
+        assertEquals(DxvkHybrid.Guest.PANVK_G720, DxvkHybrid.Guest.of("panvk-mali-g720"))
+        assertEquals(DxvkHybrid.Guest.PANVK_G615, DxvkHybrid.Guest.of("panvk-mali-g615"))
+        assertEquals(DxvkHybrid.Guest.PANVK_G710, DxvkHybrid.Guest.of("panvk-mali-g710"))
+        assertEquals(DxvkHybrid.Guest.PANVK_JM, DxvkHybrid.Guest.of("panvk-mali-jm"))
+        assertEquals(DxvkHybrid.Guest.PANVK_FAUX123, DxvkHybrid.Guest.of("panvk-faux123-rg556"))
+        assertEquals(DxvkHybrid.Guest.PANVK_KBASE, DxvkHybrid.Guest.of("panfrost_icd.aarch64"))
+        assertEquals(DxvkHybrid.Guest.RADV_XCLIPSE, DxvkHybrid.Guest.of("radv-xclipse-upstream"))
+        assertEquals(DxvkHybrid.Guest.VKBRIDGE, DxvkHybrid.Guest.of("mali-bridge"))
+        assertEquals(DxvkHybrid.Guest.VENUS, DxvkHybrid.Guest.of("venus"))
+        assertEquals(DxvkHybrid.Guest.TURNIP, DxvkHybrid.Guest.of("freedreno_icd"))
+        assertNull(DxvkHybrid.Guest.of(""))
+        assertNull(DxvkHybrid.Guest.of("nvidia"))
     }
 
     @Test fun aPackageWithAnUnknownDllIsNotTurnedIntoAHybrid() {

@@ -34,6 +34,14 @@ data class GpuInfo(
 
     val mali: Boolean get() = family in MALI
 
+    /** Which guest driver manifest this GPU wants: PanVK's on Mali, RADV's on Xclipse, Turnip's else. */
+    val icdKind: String
+        get() = when {
+            mali -> "mali"
+            name.contains("xclipse", ignoreCase = true) -> "xclipse"
+            else -> ""
+        }
+
     val support: Support
         get() = when {
             family == Family.NOT_ADRENO -> Support.UNSUPPORTED

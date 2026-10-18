@@ -101,6 +101,14 @@ class GpuDetectionTest {
         assertEquals(Family.NOT_ADRENO, GpuInfo.familyOf(false, 720))
     }
 
+    @Test fun eachGpuNamesTheGuestDriverManifestItWants() {
+        val mali = GpuInfo(name = "Mali-G720-Immortalis MC12", model = 720, family = Family.MALI_5TH, soc = "", oneUi8Gen2 = false)
+        val xclipse = GpuInfo(name = "Samsung Xclipse 940", model = 0, family = Family.NOT_ADRENO, soc = "", oneUi8Gen2 = false)
+        assertEquals("mali", mali.icdKind)
+        assertEquals("xclipse", xclipse.icdKind)
+        assertEquals("", info(adreno = true, model = 740).icdKind)
+    }
+
     @Test fun maliIsOutsideTheTestedHardwareAndSaysWhatItWouldNeed() {
         val mali = GpuInfo("Mali-G720-Immortalis MC12", 720, Family.MALI_5TH, "", false)
         assertTrue(mali.mali)

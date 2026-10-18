@@ -7,6 +7,7 @@ import android.util.Log
 import com.droiddeck.launcher.core.Downloader
 import com.droiddeck.launcher.core.FileUtils
 import com.droiddeck.launcher.core.GameEnvironment
+import com.droiddeck.launcher.gpu.DriverBundle
 import com.droiddeck.launcher.gpu.GpuInfo
 import com.droiddeck.launcher.gpu.VulkanInfo
 import com.droiddeck.launcher.runtime.LinuxRuntime
@@ -990,9 +991,12 @@ object ComponentsManager {
         packageInfo(context, dest)
     }
 
-    /** The hybrid this phone's own Vulkan driver can carry, whichever way round it is asked for. */
-    fun hybridForDevice(context: Context, reversed: Boolean): DxvkHybrid.Spec {
-        val caps = DxvkHybrid.Caps.of(VulkanInfo.query())
+    /**
+     * The hybrid the driver that will actually run DXVK can carry, whichever way round it is asked
+     * for: the bundle the user picked, else the ICD installed in the guest, else the phone's report.
+     */
+    fun hybridForDevice(context: Context, reversed: Boolean, guest: String? = null): DxvkHybrid.Spec {
+        val caps = guestCaps(context, guest)
         return DxvkHybrid.forDriver(caps, reversed) ?: error(
             context.getString(
                 when (caps.block) {
@@ -1010,11 +1014,24 @@ object ComponentsManager {
         swap(context, id, pkg.file)
     }
 
-    fun ensureMaliHybrid(context: Context): String? = ensureMaliHybrid(
-        context, GpuInfo.detect(), DxvkHybrid.Caps.of(VulkanInfo.query()),
-        { spec -> hybrid(context, spec) },
-        { id, file -> swap(context, id, file) },
+    fun ensureMaliHybrid(context: Context): String? {
+        val driver = guestDriver(context)
+        return ensureMaliHybrid(
+            context, GpuInfo.detect(), guestCaps(context, driver),
+            { spec -> hybrid(context, spec) },
+            { id, file -> swap(context, id, file) },
+            driver = driver,
+        )
+    }
+
+    private fun guestCaps(context: Context, guest: String? = null) = DxvkHybrid.Caps.forGuest(
+        DxvkHybrid.Guest.of(guest ?: guestDriver(context)), DxvkHybrid.Caps.of(VulkanInfo.query()),
     )
+
+    /** The guest's driver, named by the bundle the user picked or by the ICD manifest on disk. */
+    private fun guestDriver(context: Context): String =
+        DriverBundle.active(context)?.id?.takeIf { it.isNotEmpty() }
+            ?: LinuxRuntime.vulkanIcd(context)?.nameWithoutExtension.orEmpty()
 
     internal fun ensureMaliHybrid(
         context: Context,
@@ -1022,10 +1039,14 @@ object ComponentsManager {
         caps: DxvkHybrid.Caps,
         build: (DxvkHybrid.Spec) -> Package,
         apply: (protonId: String, file: String) -> String,
+        driver: String = "",
     ): String? {
         if (!gpu.mali) return null
         val spec = DxvkHybrid.forDriver(caps)
-            ?: return caps.block?.let { "${LABEL.getValue(DxvkHybrid.COMP)} hybrid skipped: ${it.label}" }
+            ?: return caps.block?.let {
+                "${LABEL.getValue(DxvkHybrid.COMP)} hybrid skipped (guest driver " +
+                    "${driver.ifEmpty { "the phone's own" }}): ${it.label}"
+            }
         val state = loadState(context)
         val targets = protons(context).filter { p ->
             val active = state.optJSONObject("active")?.optJSONObject(p.id)?.optJSONObject(DxvkHybrid.COMP)

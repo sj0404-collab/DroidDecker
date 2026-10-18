@@ -7,6 +7,30 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: the guest driver decides what the hybrid can be
+
+- **Seen in the code:** the hybrid read the phone's own Vulkan report, so on Mali it always answered
+  "no BC textures" and refused - while the driver that actually runs DXVK is the one DroidDeck
+  installs beside Proton, and `LinuxRuntime.vulkanIcd` picked the guest's ICD manifest by preferring
+  `freedreno`, which is Turnip's, whatever the GPU.
+- **Guest profiles** (`DxvkHybrid.Guest`, `Caps.forGuest`): what the published non-Adreno builds
+  report for themselves, taken from `The412Banner/droiddeck-nonadreno-drivers` (`drivers.json`, ten
+  entries) and zenithblue-oss's PanVK-kbase releases - Vulkan 1.3, BC1 RGB and BC7 at 8 bpp
+  (`PANVK_BC_AFRC=0` for exact), robustness2 proven on v9 and newer, no maintenance5 anywhere. So the
+  accurate half is 2.6.2 on `panvk-mali-kbase` / `-g720` / `-g615` / `faux123`, and 1.10.3 on
+  `panvk-mali-jm`, `panvk-mali-g710` (its author marks the profile unvalidated) and the Mali bridge.
+  Venus keeps the host's formats but loses robustness2 ("Venus doesn't offer it on most Malis"), and
+  anything not profiled keeps the phone's report as the conservative floor.
+- **Which driver is read at runtime:** the bundle the user picked (`DriverBundle.active`), else the
+  ICD manifest on disk. `pickIcd` now prefers `panfrost` on Mali and `radv` on Xclipse, then Venus,
+  then the first manifest; Adreno keeps `freedreno`. `GpuInfo.icdKind` names the GPU's choice and
+  `SessionService` passes it when exporting `VK_ICD_FILENAMES`.
+- **Not changed:** the support gate. Mali is still `UNSUPPORTED` until a guest driver is installed,
+  and the skip message now names the driver it looked at instead of only the missing capability.
+- Tests: `DxvkHybridTest` +5 (the guest decides, unproven robustness2 stays legacy, Venus, an
+  unprofiled driver, id/tag/ICD-name matching), `GpuDetectionTest` +1 (`icdKind`), new `GuestIcdTest`
+  (6 cases over `pickIcd`). Not yet on a device.
+
 ## 2026-10-18 - `feat/dxvk-hybrid-mali`: one DXVK install, each half from the build that owns it
 
 - **The split** (`DxvkHybrid`): DXVK's own PE import graph keeps two halves apart - D3D8/D3D9

@@ -56,7 +56,10 @@ object DxvkHybrid {
         Build("dxvk-3.1.1-linux.wcp", 3, robustness2 = true, maintenance5 = true, maintenance6 = true),
     )
 
-    /** What the phone's own Vulkan driver reports, in the keys VulkanInfo prints. */
+    /**
+     * What the driver that runs DXVK can do: read off the phone's own driver in the keys VulkanInfo
+     * prints, or taken from a [Guest] profile when the guest runs a driver DroidDeck installed.
+     */
     data class Caps(
         val apiMinor: Int,
         val bc: Boolean,
@@ -90,7 +93,86 @@ object DxvkHybrid {
                 loadStoreOpNone = yes(report["ext.VK_KHR_load_store_op_none"]),
             )
 
+            /**
+             * The guest's driver decides, not the phone's: a vendor Mali driver reports no BC
+             * textures at all, while the PanVK installed beside Proton reports them. A driver that
+             * is not profiled keeps [host], which is the conservative floor.
+             */
+            fun forGuest(guest: Guest?, host: Caps): Caps = when {
+                guest == null -> host
+                guest.caps != null -> guest.caps
+                guest.dropsHostExtras -> host.copy(
+                    robustness2 = false, maintenance5 = false, maintenance6 = false, loadStoreOpNone = false,
+                )
+
+                else -> host
+            }
+
             private fun yes(value: String?) = value.equals("yes", ignoreCase = true)
+        }
+    }
+
+    /**
+     * The drivers DroidDeck installs beside Proton, with what their published builds report for
+     * themselves - the phone's own Vulkan report says nothing about them. Taken from the driver
+     * table and release notes of The412Banner/droiddeck-nonadreno-drivers and from zenithblue-oss's
+     * PanVK-kbase releases: BC1 RGB and BC7 at 8 bpp, robustness2 (robustBufferAccess2 plus
+     * nullDescriptor) proven on v9 and newer, no maintenance5 anywhere, so the accurate half of a
+     * hybrid stops at 2.6.2 on every one of them.
+     */
+    enum class Guest(val ids: List<String>, val caps: Caps?, val dropsHostExtras: Boolean = false) {
+        /** Mali v9 to v13 on Arm's kbase driver. */
+        PANVK_KBASE(listOf("panvk-mali-kbase", "panvk-kbase"), guestCaps(robustness2 = true)),
+
+        /** The per-chip CSF builds share that Mesa base and carry the same fixes. */
+        PANVK_G720(listOf("panvk-mali-g720"), guestCaps(robustness2 = true)),
+        PANVK_G615(listOf("panvk-mali-g615"), guestCaps(robustness2 = true)),
+
+        /** Its author marks the g610-v10-csf profile as planned and not yet validated. */
+        PANVK_G710(listOf("panvk-mali-g710"), guestCaps(robustness2 = false)),
+
+        /** Older Mali on the job manager: BC yes, nullDescriptor still experimental on v9. */
+        PANVK_JM(listOf("panvk-mali-jm"), guestCaps(robustness2 = false)),
+
+        /** Handheld pairs whose Linux half is the kbase build. */
+        PANVK_FAUX123(listOf("panvk-faux123"), guestCaps(robustness2 = true)),
+
+        /** The Mali bridge emulates BCn beside the system driver; robustness2 is not established. */
+        VKBRIDGE(listOf("vkbridge", "mali-bridge", "bridge"), guestCaps(robustness2 = false)),
+
+        /** Venus forwards the phone's own driver, and on most Malis offers no robustness2. */
+        VENUS(listOf("venus"), null, dropsHostExtras = true),
+
+        /** Samsung's Exynos GPUs, through RADV. */
+        RADV_XCLIPSE(listOf("radv-xclipse", "radv"), guestCaps(robustness2 = true)),
+
+        /** Turnip for Adreno: its builds differ, so the phone's own report stays the floor. */
+        TURNIP(listOf("freedreno", "turnip"), null);
+
+        companion object {
+            /** A driver id, an installed bundle's tag, or the ICD manifest the guest carries. */
+            fun of(id: String): Guest? {
+                val key = id.trim().lowercase()
+                if (key.isEmpty()) return null
+                values().firstOrNull { g -> g.ids.any { key == it || key.startsWith("$it-") || key.startsWith("$it:") } }
+                    ?.let { return it }
+                return when {
+                    "venus" in key -> VENUS
+                    "bridge" in key -> VKBRIDGE
+                    "panfrost" in key || "panvk" in key -> when {
+                        "jm" in key -> PANVK_JM
+                        "g720" in key -> PANVK_G720
+                        "g615" in key -> PANVK_G615
+                        "g710" in key || "g610" in key -> PANVK_G710
+                        "faux123" in key -> PANVK_FAUX123
+                        else -> PANVK_KBASE
+                    }
+
+                    "xclipse" in key || "radv" in key -> RADV_XCLIPSE
+                    "freedreno" in key || "turnip" in key -> TURNIP
+                    else -> null
+                }
+            }
         }
     }
 
@@ -174,3 +256,12 @@ object DxvkHybrid {
         return if (cut in 0 until base.lastIndex) base.substring(cut + 1) else base
     }
 }
+
+/**
+ * Vulkan 1.3 with BC textures and nothing beyond: what the published non-Adreno builds are proven
+ * to have. maintenance5 and later stay off, so the accurate half stops at 2.6.2.
+ */
+private fun guestCaps(robustness2: Boolean) = DxvkHybrid.Caps(
+    apiMinor = 3, bc = true, robustness2 = robustness2,
+    maintenance5 = false, maintenance6 = false, loadStoreOpNone = false,
+)

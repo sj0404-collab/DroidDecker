@@ -78,13 +78,29 @@ public final class LinuxRuntime {
     }
 
     public static File vulkanIcd(Context context) {
+        return vulkanIcd(context, "");
+    }
+
+    /** The guest driver this GPU wants: PanVK's manifest on Mali, RADV's on Xclipse, Turnip's else. */
+    public static File vulkanIcd(Context context, String kind) {
         File icdDir = new File(rootDir(context), "usr/share/vulkan/icd.d");
-        File[] manifests = icdDir.listFiles((dir, name) -> name.endsWith(".json"));
-        if (manifests == null) return null;
-        for (File manifest : manifests) {
-            if (manifest.getName().contains("freedreno")) return manifest;
+        return pickIcd(icdDir.listFiles((dir, name) -> name.endsWith(".json")), kind);
+    }
+
+    static File pickIcd(File[] manifests, String kind) {
+        if (manifests == null || manifests.length == 0) return null;
+        for (String key : icdKeys(kind)) {
+            for (File manifest : manifests) {
+                if (manifest.getName().contains(key)) return manifest;
+            }
         }
-        return manifests.length > 0 ? manifests[0] : null;
+        return manifests[0];
+    }
+
+    private static String[] icdKeys(String kind) {
+        if ("mali".equals(kind)) return new String[] { "panfrost", "venus", "radv" };
+        if ("xclipse".equals(kind)) return new String[] { "radv", "venus" };
+        return new String[] { "freedreno" };
     }
 
     public static List<String> command(Context context, File sessionRoot, File runtimeDir,

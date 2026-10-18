@@ -64,6 +64,36 @@ textures runs no DXVK at all and the hybrid is refused with that reason.
 and `reversed` flips the two. On a driver that only reaches Vulkan 1.1-1.2, or 1.3 without
 robustness2, the pair is 1.7.2 + 1.10.3 — still a hybrid, still two halves with different strengths.
 
+## Which driver answers, and what it can do
+
+The capabilities above belong to the driver that runs DXVK, and in the guest that is not the phone's
+own Vulkan HAL: DroidDeck installs a driver beside Proton and points `VK_ICD_FILENAMES` at its
+manifest. Reading the phone's report instead is what makes a Mali device look hopeless - the vendor
+driver has no BC textures at all, while the PanVK installed beside Proton has them.
+
+`DxvkHybrid.Guest` profiles what the published builds report for themselves (from
+`The412Banner/droiddeck-nonadreno-drivers`' driver table and release notes, and zenithblue-oss's
+PanVK-kbase releases), and `Caps.forGuest(guest, host)` answers with the profile:
+
+| Guest driver | Vulkan | BC | robustness2 | Accurate half of the hybrid |
+| --- | --- | --- | --- | --- |
+| `panvk-mali-kbase`, `panvk-mali-g720`, `panvk-mali-g615`, `panvk-faux123-*` | 1.3 | yes (BC1 RGB and BC7 at 8 bpp, `PANVK_BC_AFRC=0` for exact) | yes on v9 and newer | 2.6.2 |
+| `panvk-mali-g710` | 1.3 | yes | not established (its author marks the profile planned and not yet validated) | 1.10.3 |
+| `panvk-mali-jm` | 1.3 | yes | not established (nullDescriptor is experimental on v9) | 1.10.3 |
+| the Mali bridge (`vkbridge`) | 1.3 | yes (emulated beside the system driver) | not established | 1.10.3 |
+| Venus | the host's | the host's | no on most Malis | 1.10.3, or nothing where the host has no BC |
+| Turnip (Adreno) | the host's report stays the floor | | | as before |
+| anything not profiled | the phone's own report | | | as before |
+
+No published build reports `VK_KHR_maintenance5`, so the accurate half stops at 2.6.2 on all of them:
+a hybrid on Mali is 1.7.2 answering D3D8/D3D9 and 2.6.2 answering DXGI/D3D10/D3D11 where PanVK gives
+robustness2, and 1.7.2 + 1.10.3 where it does not.
+
+Which driver the guest has is read at runtime, not asked for: the bundle the user picked
+(`DriverBundle.active`), else the ICD manifest on disk (`LinuxRuntime.vulkanIcd`). The manifest is
+chosen by GPU as well - `pickIcd` prefers `panfrost` on Mali and `radv` on Xclipse instead of always
+taking `freedreno`, which is Turnip's, and falls back to Venus and then to the first manifest.
+
 ## Mali
 
 Mali hardware has no BC texture unit, and the vendor driver reports no `VK_EXT_robustness2`. A real
@@ -94,7 +124,7 @@ for it. So Mali needs two things, and this document covers only the second:
    board.
 
 On Mali, `ComponentsManager.ensureMaliHybrid` runs when Steam starts, next to the existing forced
-packages: it reads the driver's capabilities, builds the hybrid for them and swaps it into every
+packages: it reads what the guest's driver can do, builds the hybrid for it and swaps it into every
 Proton that is still on its shipped DXVK. A Proton the user already chose a package for is left
 alone, and a driver that cannot run a second build logs the reason instead of guessing.
 
@@ -155,11 +185,13 @@ the safer default and what the two buttons build. The overlay is for a game that
 | --- | --- |
 | Halves, builds, capabilities, spec, plan, naming | `session/DxvkHybrid.kt` |
 | Composing the `.wcp`, swapping it, the Mali rule | `session/ComponentsManager.kt` (`hybrid`, `hybridForDevice`, `applyHybrid`, `ensureMaliHybrid`) |
-| Mali families, model and name | `gpu/GpuInfo.kt` |
+| Mali families, model, name and the ICD it wants | `gpu/GpuInfo.kt` |
+| Guest driver profiles | `session/DxvkHybrid.kt` (`Guest`, `Caps.forGuest`) |
+| Picking the guest's ICD manifest | `runtime/LinuxRuntime.java` (`vulkanIcd`, `pickIcd`) |
 | The extra extension probes | `cpp/deviceinfo/vkinfo.c` |
 | The two buttons | `ui/ComponentsPage.kt`, wired in `MainActivity.kt` |
 | The launch hook | `session/SessionService.kt`, beside `ensureForcedPackages` |
-| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt` |
+| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt`, `test/.../runtime/GuestIcdTest.kt` |
 | Test of the rows landing in the guest | `tools/tests/test_game_environment.py` |
 
 The composed package uses the same layout as a downloaded one (`profile.json` with `type`
