@@ -126,6 +126,34 @@ maintainers measured on a Pixel 7. Same for an unlisted Xclipse - the published 
 profile the hybrid is built from. A test walks every driver id the table can produce and fails if any
 of them has no profile.
 
+## Where the drivers come from
+
+`TurnipReleases` now reads `The412Banner/droiddeck-nonadreno-drivers` beside the three Turnip sources.
+That repository publishes one release per driver, the tag being the driver's own id
+(`panvk-mali-kbase`, `panvk-mali-jm`, `panvk-mali-g615`, `panvk-mali-g720`, `panvk-mali-g710`,
+`panvk-faux123-rp4pro/-rg556/-ace`, `radv-xclipse`, `radv-xclipse-upstream`) and the assets being that
+name with `-Android.zip`, `-Linux.zip` or `-Pair.zip`, the pair being the bundle `DriverBundle` splits
+into its two halves. Its component releases (`venus.tzst`, `gamescope.tzst`) are not driver pairs and
+are left alone.
+
+Two differences from the Turnip sources, both checked against the repository as published rather than
+assumed:
+
+- **Every release there is a prerelease.** The existing rule dropped bundle assets from prereleases,
+  which would have dropped every PanVK pair, so a source can now say it serves prereleases.
+- **The driver releases sit below a run of small component releases** - the PanVK pairs were at
+  positions 16 to 24 of 25 - so 15 releases per page never reached them. A source can now ask for more
+  pages; this one asks for 40.
+
+Each asset carries a `sha256:` digest, which is what `refresh()` requires before it will list a
+download, so the pairs pass the same integrity check as Turnip's.
+
+`DriverPairs` then names them for Mali and Xclipse families instead of falling through to "all
+Adreno", and `recommendedKey` answers with the driver `GpuInfo.recommendedDriver()` picked **only when
+a complete pair for it is actually listed** - on a Mali device with nothing downloaded yet it is still
+null, which is the honest answer. The support gate is untouched, and nothing here installs a driver by
+itself: `recommendedKey` is read by the driver menu and the device report, not by the auto-trial.
+
 ## The DXVK options a Mali device starts from
 
 The guest reads one `DXVK_CONFIG` for both halves of a hybrid, so a tuning profile may only use keys
@@ -244,6 +272,7 @@ the safer default and what the two buttons build. The overlay is for a game that
 | Composing the `.wcp`, swapping it, the Mali rule | `session/ComponentsManager.kt` (`hybrid`, `hybridForDevice`, `applyHybrid`, `ensureMaliHybrid`) |
 | Mali families, model, name and the ICD it wants | `gpu/GpuInfo.kt` |
 | Chip to GPU to driver, oldest to newest | `gpu/SocDrivers.kt` |
+| Downloading the non-Adreno pairs | `gpu/TurnipReleases.kt` (source, `kindOf`), `gpu/DriverPairs.kt` (`recommendedKey`) |
 | Guest driver profiles | `session/DxvkHybrid.kt` (`Guest`, `Caps.forGuest`) |
 | Mali DXVK tuning profile | `core/DxvkTuning.kt`, published by `session/GameEnvironmentStore.kt`, applied by `tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env` |
 | Picking the guest's ICD manifest | `runtime/LinuxRuntime.java` (`vulkanIcd`, `pickIcd`) |

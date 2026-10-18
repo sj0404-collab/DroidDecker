@@ -24,9 +24,12 @@ object TurnipReleases {
                 val sha256: String = "", val pair: String = "", val bundle: Boolean = false)
     class Check(val assets: List<Asset>, val latest: List<Pair<String, String>>, val failed: List<String>, val checkedAt: Long)
 
-    private class Kind(val linux: Boolean, val label: String, val pair: String, val bundle: Boolean = false)
+    internal class Kind(val linux: Boolean, val label: String, val pair: String, val bundle: Boolean = false)
 
-    private class Source(val label: String, val repo: String, val classify: (name: String, tag: String) -> Kind?)
+    private class Source(
+        val label: String, val repo: String, val perPage: Int = 15, val allowPrerelease: Boolean = false,
+        val classify: (name: String, tag: String) -> Kind?,
+    )
 
     private val SOURCES = listOf(
         Source("Banners-Turnip", "The412Banner/Banners-Turnip") { name, tag ->
@@ -55,7 +58,40 @@ object TurnipReleases {
             if (!Regex("""^DD-Turnip-v\d+\.\d+\.\d+\.zip$""").matches(name)) return@Source null
             Kind(false, "Android + Linux · all Adreno", DriverPairs.ddTurnip(tag), bundle = true)
         },
+        // The non-Adreno drivers. The release tag is the driver's own id - panvk-mali-kbase,
+        // panvk-mali-g615, radv-xclipse, panvk-faux123-rg556 - and the assets are that name with
+        // -Android, -Linux or -Pair, the pair being the bundle DriverBundle unpacks into its two
+        // halves. Two things differ from the Turnip sources and both are checked against the
+        // repository as published: every release there is a prerelease, and the driver releases sit
+        // below a run of small component releases (venus, gamescope), so 15 per page would not reach
+        // them - the PanVK pairs were at 16 to 24 of 25 when this was written.
+        Source(
+            "Non-Adreno", "The412Banner/droiddeck-nonadreno-drivers", perPage = 40, allowPrerelease = true,
+        ) { name, tag ->
+            val id = tag.trim().lowercase()
+            if (!id.startsWith("panvk-") && !id.startsWith("radv-")) return@Source null
+            val variant = Regex("""^.+-(Android|Linux|Pair)\.zip$""").find(name)?.groupValues?.get(1)
+                ?: return@Source null
+            Kind(variant == "Linux", nonAdrenoLabel(id), id, bundle = variant == "Pair")
+        },
     )
+
+    /** What a source makes of one asset name. The parsing is the whole risk in a new source. */
+    internal fun kindOf(source: String, name: String, tag: String): Kind? =
+        SOURCES.firstOrNull { it.label == source }?.classify?.invoke(name, tag)
+
+    private fun nonAdrenoLabel(id: String): String = when (id) {
+        "panvk-mali-kbase" -> "Mali v9-v13 · PanVK kbase"
+        "panvk-mali-jm" -> "Mali G52-G78 · PanVK job manager"
+        "panvk-mali-g615" -> "Mali G615 · PanVK"
+        "panvk-mali-g720" -> "Mali G720 · PanVK"
+        "panvk-mali-g710" -> "Mali G710 · PanVK (not validated yet)"
+        else -> when {
+            id.startsWith("panvk-faux123") -> "Mali · PanVK faux123 " + id.removePrefix("panvk-faux123-").uppercase()
+            id.startsWith("radv-xclipse") -> "Xclipse · RADV" + if (id.endsWith("upstream")) " (upstream)" else ""
+            else -> id
+        }
+    }
 
     fun cached(context: Context): Check? {
         val raw = prefs(context).getString(KEY_RELEASE, null) ?: return null
@@ -69,7 +105,7 @@ object TurnipReleases {
         var lastError: Exception? = null
         for (src in SOURCES) {
             try {
-                val releases = JSONArray(get(context, "https://api.github.com/repos/${src.repo}/releases?per_page=15"))
+                val releases = JSONArray(get(context, "https://api.github.com/repos/${src.repo}/releases?per_page=${src.perPage}"))
                 val seen = HashSet<String>()
                 var newest: String? = null
                 for (i in 0 until releases.length()) {
@@ -82,7 +118,7 @@ object TurnipReleases {
                         val a = list.getJSONObject(j)
                         val name = a.getString("name")
                         val kind = src.classify(name, tag) ?: continue
-                        if (kind.bundle && r.optBoolean("prerelease")) continue
+                        if (kind.bundle && r.optBoolean("prerelease") && !src.allowPrerelease) continue
                         val linux = kind.linux
                         val label = kind.label
                         val sha = Hashes.githubSha256(a.optString("digest")) ?: continue

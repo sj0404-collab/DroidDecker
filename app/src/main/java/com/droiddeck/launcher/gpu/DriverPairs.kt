@@ -29,10 +29,26 @@ object DriverPairs {
     }
 
     private val ALL_ADRENO = setOf(Family.A6XX, Family.A7XX, Family.A7XX_LOW, Family.A8XX, Family.ADRENO_UNKNOWN)
+    private val ALL_MALI = setOf(Family.MALI_5TH, Family.MALI_VALHALL, Family.MALI_BIFROST, Family.MALI_UNKNOWN)
 
     private fun describe(key: String): Pair<String, Set<Family>> = when {
         key.startsWith(DD_TURNIP) -> "DroidDeck · DD-Turnip" to ALL_ADRENO
+        key.startsWith("panvk-") -> nonAdrenoName(key) to ALL_MALI
+        key.startsWith("radv-") -> nonAdrenoName(key) to setOf(Family.NOT_ADRENO)
         else -> describeFixed(key)
+    }
+
+    private fun nonAdrenoName(key: String): String = when (key) {
+        SocDrivers.PANVK_KBASE -> "PanVK · Mali v9-v13 (kbase)"
+        SocDrivers.PANVK_JM -> "PanVK · Mali G52-G78 (job manager)"
+        SocDrivers.PANVK_G615 -> "PanVK · Mali G615 (Dimensity 7300/8300)"
+        SocDrivers.PANVK_G720 -> "PanVK · Mali G720 (Dimensity 9300/8400)"
+        "panvk-mali-g710" -> "PanVK · Mali G710 (not validated yet)"
+        else -> when {
+            key.startsWith("panvk-faux123") -> "PanVK faux123 · " + key.removePrefix("panvk-faux123-").uppercase()
+            key.startsWith("radv-xclipse") -> "RADV · Xclipse" + if (key.endsWith("upstream")) " (upstream)" else ""
+            else -> key
+        }
     }
 
     private fun describeFixed(key: String): Pair<String, Set<Family>> = when (key) {
@@ -62,14 +78,24 @@ object DriverPairs {
     }
 
     fun recommendedKey(gpu: GpuInfo, pairs: List<DriverPair>): String? = when (gpu.family) {
-        Family.NOT_ADRENO -> null
-        Family.MALI_5TH, Family.MALI_VALHALL, Family.MALI_BIFROST, Family.MALI_UNKNOWN -> null
+        Family.NOT_ADRENO ->
+            if (gpu.name.contains("xclipse", ignoreCase = true)) installable(pairs, SocDrivers.RADV_XCLIPSE) else null
+        Family.MALI_5TH, Family.MALI_VALHALL, Family.MALI_BIFROST, Family.MALI_UNKNOWN ->
+            gpu.recommendedDriver()?.let { installable(pairs, it) }
         Family.A8XX -> if (gpu.model == 840) newestDdTurnip(pairs) ?: WN_BALANCED else WN_BALANCED
         Family.A7XX_LOW -> BANNER_710
         Family.A7XX -> if (gpu.oneUi8Gen2) BANNER_ONEUI else BANNER
         Family.A6XX -> BANNER
         Family.ADRENO_UNKNOWN -> if (android.os.Build.VERSION.SDK_INT >= 36) WN_BALANCED else BANNER
     }
+
+    /**
+     * A driver is recommended only when the app is holding a complete pair for it right now. On a
+     * Mali device with nothing downloaded yet this is null, which is the honest answer: there is
+     * nothing to install, rather than a name to install from somewhere else.
+     */
+    private fun installable(pairs: List<DriverPair>, key: String): String? =
+        if (pairs.any { it.key == key && it.complete }) key else null
 
     fun newestDdTurnip(pairs: List<DriverPair>): String? = pairs
         .filter { it.key.startsWith("$DD_TURNIP:") && it.complete }

@@ -7,6 +7,31 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: the app can now see the non-Adreno drivers
+
+- **Why:** `SocDrivers` could name the driver a chip needs, but nothing could fetch it: the repository
+  that publishes those drivers was not a source, so the list was always empty and every recommendation
+  resolved to null.
+- **Source added:** `The412Banner/droiddeck-nonadreno-drivers`. Its release tags are the driver ids
+  (`panvk-mali-kbase`, `panvk-mali-jm`, `-g615`, `-g720`, `-g710`, `panvk-faux123-*`,
+  `radv-xclipse`, `radv-xclipse-upstream`) and its assets are `<name>-Android.zip`, `-Linux.zip` and
+  `-Pair.zip`, the pair being the bundle `DriverBundle` splits in two. Component releases
+  (`venus.tzst`, `gamescope.tzst`) are not pairs and are ignored.
+- **Two facts checked against the repository, not assumed:** every release there is a prerelease, and
+  the existing rule dropped bundle assets from prereleases - so every PanVK pair would have been
+  dropped; and the driver releases sit at positions 16-24 of 25 below a run of component releases, so
+  15 per page never reached them. A source can now serve prereleases and ask for more pages (40 here).
+  Assets carry `sha256:` digests, so they pass the existing integrity check unchanged.
+- **`DriverPairs`:** non-Adreno keys are named and given Mali or Xclipse families instead of falling
+  through to "all Adreno", and `recommendedKey` returns the driver `GpuInfo.recommendedDriver()`
+  picked only when a complete pair for it is listed. Nothing downloaded yet means null, as before.
+- **Not changed:** the support gate, and no driver installs itself - `recommendedKey` is read by the
+  driver menu and the device report, not by `AutoDriverTrial`.
+- Tests: `NonAdrenoSourcesTest` (7) covers the classification of every asset shape, the components
+  that must be ignored, a regression check that the Turnip sources classify exactly as before, and the
+  recommendations for G720/G57/G610/G52, Midgard, Xclipse and PowerVR. `TurnipReleases.kindOf` is
+  exposed internally so the parsing - the whole risk in a new source - is testable without network.
+
 ## 2026-10-18 - `feat/dxvk-hybrid-mali`: which chip gets which driver
 
 - **Why:** nothing in the app could say which guest driver a non-Adreno device needs. `SocNames`
