@@ -94,6 +94,38 @@ Which driver the guest has is read at runtime, not asked for: the bundle the use
 chosen by GPU as well - `pickIcd` prefers `panfrost` on Mali and `radv` on Xclipse instead of always
 taking `freedreno`, which is Turnip's, and falls back to Venus and then to the first manifest.
 
+## Which chip gets which driver
+
+`SocDrivers` answers two questions, oldest chip to newest: what a `ro.board.platform` code means
+(`mt6789` is a Helio G99, not a name anybody recognises), and which published guest driver can talk
+to the GPU inside it. 88 platform codes are carried: MediaTek Helio and Dimensity plus Kompanio,
+Samsung Exynos under both spellings its devices report, Google Tensor, HiSilicon Kirin, Unisoc and
+Rockchip. Qualcomm is deliberately absent - `SocNames` labels those chips and `DriverPairs` picks
+their Turnip build.
+
+The driver is chosen in two steps, because they fail differently:
+
+1. **The chip.** Where the driver maintainers validated a build against an exact chip, that build
+   wins: Helio G85/G88/G95/G99/G100, Dimensity 700/810/6020/6080/6100+/1080/1100/1200/1300/8050,
+   Kompanio 1300T, Unisoc T820 and Exynos 1280/1330/1380 get `panvk-mali-jm`; Dimensity 7300/8300
+   get `panvk-mali-g615`; Dimensity 9300/9300+ get `panvk-mali-g720`; Exynos 2200/1480/2400 get
+   `radv-xclipse`.
+2. **The GPU.** Otherwise the reported GPU decides by architecture: Midgard (Mali-T), Bifrost
+   G31/G51/G71/G72, PowerVR and Huawei's Maleoon have **no published driver**, which is an answer and
+   not a gap - `null` rather than a guess, because installing a build that cannot talk to the GPU
+   produces a black screen and no explanation. G52 and G76 are job-manager; G57, G68, G77, G78, G610,
+   G710, G715, G725 and G925 are covered by `panvk-mali-kbase`; G615 and G720 have their own builds.
+
+A build whose own author has not validated it is not recommended: the `panvk-mali-g710` profile is
+marked planned, so a Dimensity 9000 or a Tensor G2 falls back to `panvk-mali-kbase`, which the
+maintainers measured on a Pixel 7. Same for an unlisted Xclipse - the published RADV builds name
+920, 530 and 940, and other Xclipse parts get one by architecture rather than by measurement.
+
+`GpuInfo.soc` now carries the chip name on non-Adreno devices too (it was empty), and
+`GpuInfo.recommendedDriver()` returns the id - which `DxvkHybrid.Guest.of` turns into the capability
+profile the hybrid is built from. A test walks every driver id the table can produce and fails if any
+of them has no profile.
+
 ## The DXVK options a Mali device starts from
 
 The guest reads one `DXVK_CONFIG` for both halves of a hybrid, so a tuning profile may only use keys
@@ -211,13 +243,14 @@ the safer default and what the two buttons build. The overlay is for a game that
 | Halves, builds, capabilities, spec, plan, naming | `session/DxvkHybrid.kt` |
 | Composing the `.wcp`, swapping it, the Mali rule | `session/ComponentsManager.kt` (`hybrid`, `hybridForDevice`, `applyHybrid`, `ensureMaliHybrid`) |
 | Mali families, model, name and the ICD it wants | `gpu/GpuInfo.kt` |
+| Chip to GPU to driver, oldest to newest | `gpu/SocDrivers.kt` |
 | Guest driver profiles | `session/DxvkHybrid.kt` (`Guest`, `Caps.forGuest`) |
 | Mali DXVK tuning profile | `core/DxvkTuning.kt`, published by `session/GameEnvironmentStore.kt`, applied by `tools/linuxfs/overlay/usr/local/bin/droiddeck-game-env` |
 | Picking the guest's ICD manifest | `runtime/LinuxRuntime.java` (`vulkanIcd`, `pickIcd`) |
 | The extra extension probes | `cpp/deviceinfo/vkinfo.c` |
 | The two buttons | `ui/ComponentsPage.kt`, wired in `MainActivity.kt` |
 | The launch hook | `session/SessionService.kt`, beside `ensureForcedPackages` |
-| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt`, `test/.../runtime/GuestIcdTest.kt`, `test/.../core/DxvkTuningTest.kt`, `tools/tests/test_game_environment.py` |
+| Tests | `test/.../session/DxvkHybridTest.kt`, `test/.../gpu/GpuDetectionTest.kt`, `test/.../runtime/GuestIcdTest.kt`, `test/.../core/DxvkTuningTest.kt`, `test/.../gpu/SocDriversTest.kt`, `tools/tests/test_game_environment.py` |
 | Test of the rows landing in the guest | `tools/tests/test_game_environment.py` |
 
 The composed package uses the same layout as a downloaded one (`profile.json` with `type`

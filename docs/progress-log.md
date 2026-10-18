@@ -7,6 +7,31 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: which chip gets which driver
+
+- **Why:** nothing in the app could say which guest driver a non-Adreno device needs. `SocNames`
+  covers Qualcomm only, `DriverPairs.recommendedKey` returns null for every Mali family, and a
+  `ro.board.platform` code such as `mt6789` is not a name anybody recognises.
+- **`SocDrivers`** (new, `gpu/`): 88 platform codes - MediaTek Helio, Dimensity and Kompanio,
+  Samsung Exynos under both spellings, Google Tensor, HiSilicon Kirin, Unisoc, Rockchip - each with
+  its marketing name, the GPU documented in it, and the driver validated against it where one exists
+  (chip lists from `The412Banner/droiddeck-nonadreno-drivers` `drivers.json`). Qualcomm stays with
+  `SocNames` and `DriverPairs`.
+- **Two-step choice:** the chip first, then the GPU's architecture. Midgard (Mali-T), Bifrost
+  G31/G51/G71/G72, PowerVR and Maleoon answer `null` - no published driver, stated rather than
+  guessed, because a wrong build means a black screen with no explanation. G52/G76 are job manager,
+  G57-G925 are the kbase build, G615 and G720 have chip builds.
+- **Unvalidated builds are not recommended:** `panvk-mali-g710` is marked planned by its author, so
+  Dimensity 9000 and Tensor G2 fall back to `panvk-mali-kbase`, which was measured on a Pixel 7.
+- `GpuInfo.soc` is now filled on non-Adreno devices (it was empty) and `GpuInfo.recommendedDriver()`
+  returns the id that `DxvkHybrid.Guest.of` turns into a capability profile.
+- Tests: `SocDriversTest` (7) covers the no-driver cases, the job-manager and kbase ranges, the chip
+  overrides, the vendor labels, refusal of an unknown Mali, and an invariant walk over every driver
+  id the table can produce asserting each has a capability profile.
+- **Still missing:** the app cannot yet download those pairs. `TurnipReleases.SOURCES` has no
+  non-Adreno repository, and `DriverPair.complete` requires a display half, so a Linux-only pair such
+  as PanVK's cannot be represented. That is the next change.
+
 ## 2026-10-18 - `feat/dxvk-hybrid-mali`: what DXVK is told on a Mali device
 
 - **Why:** a hybrid answers D3D9 with 1.7.2 and D3D11 with a newer build, and both read the same

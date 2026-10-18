@@ -34,6 +34,13 @@ data class GpuInfo(
 
     val mali: Boolean get() = family in MALI
 
+    /**
+     * The published guest driver for this GPU, or null when nobody has published one for it. The
+     * platform code is what names the chip - `ro.board.platform` reads `mt6789`, not `Helio G99`.
+     */
+    fun recommendedDriver(platform: String = systemProperty("ro.board.platform")): String? =
+        SocDrivers.driver(name, model, platform)
+
     /** Which guest driver manifest this GPU wants: PanVK's on Mali, RADV's on Xclipse, Turnip's else. */
     val icdKind: String
         get() = when {
@@ -94,7 +101,7 @@ data class GpuInfo(
                 systemProperty("ro.hardware.vulkan").contains("mali", ignoreCase = true))
             val raw = listOf("/sys/class/kgsl/kgsl-3d0/gpu_model", "/sys/class/kgsl/kgsl-3d0/gpu_chipid")
                 .firstNotNullOfOrNull { FileUtils.readString(File(it))?.trim()?.takeIf(String::isNotEmpty) }
-            val soc = if (adreno) SocNames.label() else ""
+            val soc = if (adreno) SocNames.label() else SocDrivers.label(systemProperty("ro.board.platform"))
             val fromKernel = raw?.let { threeDigits(it) } ?: 0
             val fromVulkan = if (fromKernel > 0 || !adreno) 0 else VulkanInfo.cachedOrNull()?.get("device")?.let { threeDigits(it) } ?: 0
             val fromPlatform = if (fromKernel > 0 || fromVulkan > 0 || !adreno) 0 else platformModel()
