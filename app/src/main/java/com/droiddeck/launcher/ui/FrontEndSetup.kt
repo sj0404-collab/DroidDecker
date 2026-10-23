@@ -44,6 +44,8 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.VideogameAsset
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -166,6 +168,7 @@ internal fun SetupPanel(
     val limitBlocks = PhantomProcessLimit.blocksSteam(s.phantomProcessStatus)
     val signedIn = s.offlineAccount != null
     var showLimitDetails by rememberSaveable { mutableStateOf(false) }
+    var runtimeProfileMenu by rememberSaveable { mutableStateOf(false) }
     var editSgdbKey by remember { mutableStateOf(false) }
     var editDownloadPrefix by remember { mutableStateOf(false) }
     if (editSgdbKey) SgdbKeyDialog(s.sgdbUserKey, onSave = { a.onSgdbKey(it); editSgdbKey = false }, onDismiss = { editSgdbKey = false })
@@ -234,12 +237,50 @@ internal fun SetupPanel(
                                 when {
                                     s.busy -> null
                                     s.removalPending -> stringResource(R.string.runtime_removal_incomplete)
-                                    !s.ready -> stringResource(R.string.setup_runtime_missing)
+                                    !s.ready -> stringResource(
+                                        if (s.runtimeProfile == "lite") R.string.setup_runtime_missing_lite
+                                        else R.string.setup_runtime_missing,
+                                    )
                                     s.available != null && s.available != s.installed -> stringResource(R.string.setup_runtime_update, s.installed ?: stringResource(R.string.setup_installed))
                                     else -> stringResource(R.string.setup_runtime_current, s.installed ?: stringResource(R.string.setup_installed))
                                 },
                                 divider = divider && !s.busy,
-                            ) { SecondaryButton(runtime, enabled = !s.busy && !s.runtimeActionsBlocked && !s.sessionRunning, compact = true, onClick = a.onRuntime) }
+                            ) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Box {
+                                        SecondaryButton(
+                                            stringResource(if (s.runtimeProfile == "lite") R.string.setup_runtime_profile_lite else R.string.setup_runtime_profile_full),
+                                            enabled = !s.busy && !s.runtimeActionsBlocked && !s.sessionRunning,
+                                            compact = true,
+                                        ) { runtimeProfileMenu = true }
+                                        DropdownMenu(
+                                            expanded = runtimeProfileMenu,
+                                            onDismissRequest = { runtimeProfileMenu = false },
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.setup_runtime_profile_lite_menu)) },
+                                                onClick = {
+                                                    runtimeProfileMenu = false
+                                                    a.onRuntimeProfile("lite")
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.setup_runtime_profile_full_menu)) },
+                                                onClick = {
+                                                    runtimeProfileMenu = false
+                                                    a.onRuntimeProfile("full")
+                                                },
+                                            )
+                                        }
+                                    }
+                                    SecondaryButton(
+                                        runtime,
+                                        enabled = !s.busy && !s.runtimeActionsBlocked && !s.sessionRunning,
+                                        compact = true,
+                                        onClick = a.onRuntime,
+                                    )
+                                }
+                            }
                             if (s.busy) {
                                 Column(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp)) {
                                     Text(

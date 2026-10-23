@@ -102,6 +102,7 @@ class MainActivity : ComponentActivity() {
     private var ready by mutableStateOf(false)
     private var removalPending by mutableStateOf(false)
     private var available by mutableStateOf<LinuxRuntimeInstaller.Release?>(null)
+    private var runtimeProfile by mutableStateOf(LinuxRuntimeInstaller.PROFILE_LITE)
     private var busy by mutableStateOf(false)
     private var stage by mutableStateOf("")
     private var percent by mutableIntStateOf(-1)
@@ -718,6 +719,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         readGameIntent(intent)
+        runtimeProfile = LinuxRuntimeInstaller.selectedProfile(this)
         gameSyncFolder = GameFileSync.folder(this)
         displayManager = getSystemService(DISPLAY_SERVICE) as DisplayManager
         refreshPhantomStatus()
@@ -754,7 +756,8 @@ class MainActivity : ComponentActivity() {
                 com.droiddeck.launcher.ui.FloodBehind({ floodProgress }) {
                 FrontEndScreen(
                     FrontEndState(
-                        installed = installed, ready = ready, available = available?.version, removalPending = removalPending, runtimeActionsBlocked = runtimeChangesBlocked(),
+                        installed = installed, ready = ready, available = available?.version, runtimeProfile = runtimeProfile,
+                        removalPending = removalPending, runtimeActionsBlocked = runtimeChangesBlocked(),
                         shortcutPicker = shortcutPicker,
                         shortcutLibraryScanning = shortcutLibraryScanning,
                         gameSyncFolder = gameSyncFolder,
@@ -888,6 +891,7 @@ class MainActivity : ComponentActivity() {
                         onInstallPackage = { id -> installPackage(id) },
                         onRemovePackage = { id -> removePackage(id) },
                         onRuntime = { onRuntimeButton() },
+                        onRuntimeProfile = { profile -> selectRuntimeProfile(profile) },
                         onFrameGenPick = { mode ->
                             FrameGen.set(this, mode)
                             frameGenLabel = FrameGen.label(this)
@@ -1929,6 +1933,16 @@ class MainActivity : ComponentActivity() {
         }, "library").start()
     }
 
+    private fun selectRuntimeProfile(profile: String) {
+        if (runtimeChangesBlocked()) return
+        if (profile != LinuxRuntimeInstaller.PROFILE_LITE && profile != LinuxRuntimeInstaller.PROFILE_FULL) return
+        if (runtimeProfile == profile) return
+        LinuxRuntimeInstaller.selectProfile(this, profile)
+        runtimeProfile = profile
+        available = null
+        Thread({ checkCatalog() }, "runtime-profile-catalog").start()
+    }
+
     private fun onRuntimeButton() {
         if (runtimeChangesBlocked()) return
         val release = available
@@ -2055,8 +2069,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkCatalog() {
-        val release = LinuxRuntimeInstaller.fetchRelease()
-        Log.i(TAG, "catalog: " + (release?.version ?: "unreachable"))
+        val release = LinuxRuntimeInstaller.fetchRelease(this)
+        Log.i(TAG, "catalog (${LinuxRuntimeInstaller.selectedProfile(this)}): " + (release?.version ?: "unreachable"))
         ui.post { if (release != null) available = release }
     }
 

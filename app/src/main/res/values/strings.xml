@@ -708,6 +708,11 @@
     <string name="setup_gpu_unsupported_detail">Steam needs an Adreno driver; %1$s may show a black screen</string>
     <string name="setup_runtime">Linux runtime</string>
     <string name="setup_runtime_progress">%1$s · %2$d%%</string>
+    <string name="setup_runtime_profile_lite">Lite</string>
+    <string name="setup_runtime_profile_full">Full</string>
+    <string name="setup_runtime_profile_lite_menu">Lite · experimental; about 1.0 GB installed, ~301 MB download; optional components on demand</string>
+    <string name="setup_runtime_profile_full_menu">Full · complete runtime, about 3 GB installed</string>
+    <string name="setup_runtime_missing_lite">Not installed · Lite experimental: about 1.0 GB installed, ~301 MB download; optional components on demand</string>
     <string name="setup_runtime_missing">Not installed · about 3 GB, installed on first Play</string>
     <string name="setup_installed">Installed</string>
     <string name="setup_runtime_update">%1$s · update available</string>
