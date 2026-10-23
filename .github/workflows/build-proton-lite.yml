@@ -65,7 +65,7 @@ jobs:
           set -euo pipefail
           source_tar="$RUNNER_TEMP/proton-full.tar.zst"
           lite_tar="$GITHUB_WORKSPACE/out/proton-experimental-arm64-lite-25502785.tar.zst"
-          zstd -dc "$source_tar" | zstd -T0 -19 -o "$lite_tar"
+          zstd -dc "$source_tar" | zstd -T0 --ultra -22 --long=26 -o "$lite_tar"
           zstd -t "$lite_tar"
           source_tree_sha=$(zstd -dc "$source_tar" | sha256sum | awk '{print $1}')
           lite_tree_sha=$(zstd -dc "$lite_tar" | sha256sum | awk '{print $1}')
@@ -82,7 +82,7 @@ jobs:
             echo "- Lite archive: $lite_size bytes"
             echo "- Original archive: $SOURCE_SIZE bytes"
             echo "- Decompressed tar SHA-256 (both archives): $source_tree_sha"
-            echo "- The archive contains the exact same files as the pinned source; only Zstandard compression level 19 differs. Installed size and Proton features are unchanged."
+            echo "- The archive contains the exact same files as the pinned source; only Zstandard compression settings differ (ultra level 22, 64 MiB window). Installed size and Proton features are unchanged."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
@@ -105,7 +105,7 @@ jobs:
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           # Proton Experimental ARM64 — Lite download
 
-          This release uses the pinned Proton Experimental ARM64 archive from Droid-Deck/DroidDeck-Components and recompresses the exact same tar stream using Zstandard level 19. The workflow verifies the source checksum, tests the compressed archive, and compares the SHA-256 of the decompressed streams.
+          This release uses the pinned Proton Experimental ARM64 archive from Droid-Deck/DroidDeck-Components and recompresses the exact same tar stream using Zstandard ultra level 22 with a 64 MiB window. The workflow verifies the source checksum, tests the compressed archive, and compares the SHA-256 of the decompressed streams.
 
           No Proton files, DLLs, languages, or runtime components are removed. The Lite asset reduces download bytes only; its installed size and compatibility are unchanged. Source archive SHA-256: $SOURCE_SHA256 ($SOURCE_SIZE bytes).
 
