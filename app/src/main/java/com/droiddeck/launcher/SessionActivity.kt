@@ -1368,7 +1368,7 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private fun installRuntime(): String? {
-        val release = com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.fetchRelease()
+        val release = com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.fetchRelease(this)
             ?: return getString(R.string.session_runtime_catalog_unreachable)
         val ok = com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.install(this, release,
             progressFor(RUNTIME_LINES, release.size / 1_000_000))

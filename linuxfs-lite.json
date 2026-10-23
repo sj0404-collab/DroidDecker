@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "version": "r1",
+  "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/linuxfs-lite-r1/linuxfs.tar.zst",
+  "sha256": "eb7be4f50a4277e0b359d5c22071a58b966ece193eeac1c01676e89345807765",
+  "size": 315139215,
+  "installedSizeMiB": 991,
+  "recipe": "The412Banner/winlator-contents@95dd441d8f0e8dbb63066e432a76580bd01b26cf",
+  "recipeLicense": "GPL-3.0"
+}

@@ -32,8 +32,14 @@ import java.util.concurrent.CountDownLatch;
 public final class LinuxRuntimeInstaller {
     private static final String TAG = "LinuxRuntimeInstaller";
 
-    public static final String CATALOG_URL =
+    public static final String FULL_CATALOG_URL =
             "https://raw.githubusercontent.com/Droid-Deck/DroidDeck-Components/main/linuxfs.json";
+    public static final String LITE_CATALOG_URL =
+            "https://raw.githubusercontent.com/sj0404-collab/DroidDecker/main/linuxfs-lite.json";
+    public static final String PROFILE_LITE = "lite";
+    public static final String PROFILE_FULL = "full";
+    private static final String PROFILE_PREFS = "linux_runtime_profile";
+    private static final String PROFILE_KEY = "profile";
 
     private static final String VERSION_FILE = ".version";
 
@@ -86,20 +92,69 @@ public final class LinuxRuntimeInstaller {
         return v == null ? null : v.trim();
     }
 
+    public static String selectedProfile(Context context) {
+        if (context == null) return PROFILE_LITE;
+        Context app = context.getApplicationContext();
+        String profile = app.getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+                .getString(PROFILE_KEY, null);
+        if (PROFILE_FULL.equals(profile) || PROFILE_LITE.equals(profile)) return profile;
+        String installed = installedVersion(app);
+        return installed != null && !installed.startsWith("lite-") ? PROFILE_FULL : PROFILE_LITE;
+    }
+
+    public static void selectProfile(Context context, String profile) {
+        if (!PROFILE_LITE.equals(profile) && !PROFILE_FULL.equals(profile)) {
+            throw new IllegalArgumentException("unknown Linux runtime profile: " + profile);
+        }
+        context.getApplicationContext()
+                .getSharedPreferences(PROFILE_PREFS, Context.MODE_PRIVATE)
+                .edit().putString(PROFILE_KEY, profile).apply();
+    }
+
+    public static Release fetchRelease(Context context) {
+        return fetchRelease(selectedProfile(context));
+    }
+
     public static Release fetchRelease() {
-        String body = Downloader.downloadString(CATALOG_URL);
+        return fetchRelease(PROFILE_LITE);
+    }
+
+    public static Release fetchRelease(String profile) {
+        if (!PROFILE_LITE.equals(profile) && !PROFILE_FULL.equals(profile)) return null;
+        String source = PROFILE_LITE.equals(profile) ? LITE_CATALOG_URL : FULL_CATALOG_URL;
+        String body = Downloader.downloadString(source);
         if (body == null || body.isEmpty()) return null;
         try {
-            JSONObject json = new JSONObject(body);
-            String version = json.optString("version", "");
-            String url = json.optString("url", "");
-            String sha256 = json.optString("sha256", "");
-            if (version.isEmpty() || url.isEmpty() || sha256.isEmpty()) return null;
-            return new Release(version, url, sha256, json.optLong("size", 0L));
+            return parseReleaseJson(body, profile);
         } catch (Exception e) {
             Log.w(TAG, "catalog: " + e);
             return null;
         }
+    }
+
+    static Release parseReleaseJson(String body, String profile) throws Exception {
+        JSONObject json = new JSONObject(body);
+        return releaseFromCatalogFields(
+                json.optString("version"), json.optString("url"), json.optString("sha256"),
+                json.optLong("size", 0L), profile);
+    }
+
+    static Release releaseFromCatalogFields(String rawVersion, String rawUrl, String rawSha256,
+                                            long size, String profile) {
+        String version = rawVersion == null ? "" : rawVersion.trim();
+        String url = rawUrl == null ? "" : rawUrl.trim();
+        String sha256 = rawSha256 == null ? "" : rawSha256.trim().toLowerCase(java.util.Locale.ROOT);
+        if (version.isEmpty() || !version.matches("[A-Za-z0-9._-]+")) {
+            throw new IllegalArgumentException("invalid runtime version");
+        }
+        if (!url.startsWith("https://github.com/") || !url.contains("/releases/download/")) {
+            throw new IllegalArgumentException("unexpected runtime download URL");
+        }
+        if (!sha256.matches("[0-9a-f]{64}") || size <= 0L) {
+            throw new IllegalArgumentException("invalid runtime checksum or size");
+        }
+        if (PROFILE_LITE.equals(profile)) version = "lite-" + version;
+        return new Release(version, url, sha256, size);
     }
 
     private static final String USER_DATA = "root";
