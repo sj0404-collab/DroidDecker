@@ -90,6 +90,7 @@ class DownloaderResumeTest {
         val url = "http://127.0.0.1:${server.localPort}/runtime.tar.zst"
         val target = File(dir, "detailed.tar.zst")
         val samples = CopyOnWriteArrayList<Pair<Long, Long>>()
+        misbehave = true // this fixture otherwise deliberately cuts off plain downloads
 
         assertTrue(Downloader.downloadFileDetailed(url, target, false, null) { done, total ->
             samples.add(done to total)
@@ -179,6 +180,9 @@ class DownloaderResumeTest {
         assertEquals(listOf(url), DownloadSource.candidates(url))
         val catalog = "https://raw.githubusercontent.com/Droid-Deck/DroidDeck-CI/main/catalog.json"
         assertEquals(listOf(catalog), DownloadSource.candidates(catalog))
+        val protonLiteCatalog = "https://raw.githubusercontent.com/sj0404-collab/DroidDecker/main/proton-lite.json"
+        assertTrue(DownloadSource.isCatalog(protonLiteCatalog))
+        assertEquals(listOf(protonLiteCatalog), DownloadSource.candidates(protonLiteCatalog))
     }
 
 }
