@@ -44,6 +44,10 @@ public final class Downloader {
         return fetch(url).body;
     }
 
+    public interface TransferProgressListener {
+        void onProgress(long bytesDone, long bytesTotal);
+    }
+
     public static boolean downloadFile(String url, File destination, boolean resume,
                                        java.util.function.Consumer<Float> progress) {
         return downloadFile(url, destination, resume, null, progress);
@@ -52,19 +56,38 @@ public final class Downloader {
     /** Verify each candidate before accepting it, so a bad mirror can fall back. */
     public static boolean downloadFile(String url, File destination, boolean resume, String expectedSha256,
                                        java.util.function.Consumer<Float> progress) {
+        validateChecksum(expectedSha256);
+        return downloadCandidates(url, DownloadSource.INSTANCE.candidates(url), destination, resume, expectedSha256, progress);
+    }
+
+    /** Like downloadFile, but reports exact transfer byte counts when the server exposes them. */
+    public static boolean downloadFileDetailed(String url, File destination, boolean resume, String expectedSha256,
+                                               TransferProgressListener progress) {
+        validateChecksum(expectedSha256);
+        return downloadCandidatesDetailed(url, DownloadSource.INSTANCE.candidates(url), destination, resume,
+                expectedSha256, null, progress);
+    }
+
+    private static void validateChecksum(String expectedSha256) {
         if (expectedSha256 != null && !expectedSha256.matches("(?i)[0-9a-f]{64}"))
             throw new IllegalArgumentException("Expected SHA-256 must be 64 hex characters");
-        return downloadCandidates(url, DownloadSource.INSTANCE.candidates(url), destination, resume, expectedSha256, progress);
     }
 
     // Package-private for the local multi-source HTTP test.
     static boolean downloadCandidates(String original, List<String> sources, File destination, boolean resume,
                                       String expectedSha256, java.util.function.Consumer<Float> progress) {
+        return downloadCandidatesDetailed(original, sources, destination, resume, expectedSha256, progress, null);
+    }
+
+    private static boolean downloadCandidatesDetailed(String original, List<String> sources, File destination, boolean resume,
+                                                       String expectedSha256,
+                                                       java.util.function.Consumer<Float> progress,
+                                                       TransferProgressListener transferProgress) {
         Identity identity = loadIdentity(destination, resume, expectedSha256);
         for (int i = 0; i < sources.size(); i++) {
             String source = sources.get(i);
             if (i > 0) Log.i(TAG, "retrying " + original + " via " + source);
-            Outcome outcome = attempt(source, destination, resume, identity, expectedSha256, progress);
+            Outcome outcome = attempt(source, destination, resume, identity, expectedSha256, progress, transferProgress);
             if (outcome == Outcome.DONE) {
                 if (expectedSha256 != null && !expectedSha256.equalsIgnoreCase(Hashes.sha256(destination))) {
                     Log.w(TAG, "checksum mismatch from " + source + "; trying another source");
@@ -74,6 +97,7 @@ public final class Downloader {
                 resumeFile(destination).delete();
                 DownloadSource.INSTANCE.succeeded(source);
                 if (progress != null) progress.accept(1f);
+                if (transferProgress != null) transferProgress.onProgress(destination.length(), destination.length());
                 return true;
             }
             if (outcome == Outcome.FATAL && source.equals(original)) return false;
@@ -150,7 +174,8 @@ public final class Downloader {
     }
 
     private static Outcome attempt(String url, File destination, boolean resume, Identity identity,
-                                   String expectedSha256, java.util.function.Consumer<Float> progress) {
+                                   String expectedSha256, java.util.function.Consumer<Float> progress,
+                                   TransferProgressListener transferProgress) {
         HttpURLConnection connection = null;
         long have = resume && destination.isFile() ? destination.length() : 0;
         try {
@@ -168,7 +193,7 @@ public final class Downloader {
             if (have > 0 && code == HTTP_RANGE_NOT_SATISFIABLE) {
                 connection.disconnect();
                 if (!discardPartial(destination, identity)) return Outcome.RETRY;
-                return attempt(url, destination, false, identity, expectedSha256, progress);
+                return attempt(url, destination, false, identity, expectedSha256, progress, transferProgress);
             }
             if (code / 100 != 2) {
                 Log.w(TAG, url + " -> HTTP " + code);
@@ -179,13 +204,13 @@ public final class Downloader {
             if (appending && !rangeStartsAt(connection.getHeaderField("Content-Range"), have)) {
                 connection.disconnect();
                 if (!discardPartial(destination, identity)) return Outcome.RETRY;
-                return attempt(url, destination, false, identity, expectedSha256, progress);
+                return attempt(url, destination, false, identity, expectedSha256, progress, transferProgress);
             }
             String etag = connection.getHeaderField("ETag");
             if (have > 0 && appending && (!strongETag(etag) || !etag.equals(identity.etag))) {
                 connection.disconnect();
                 if (!discardPartial(destination, identity)) return Outcome.RETRY;
-                return attempt(url, destination, false, identity, expectedSha256, progress);
+                return attempt(url, destination, false, identity, expectedSha256, progress, transferProgress);
             }
             if (!appending && have > 0) {
                 // If-Range may legitimately return full 200 when representation changed.
@@ -209,9 +234,10 @@ public final class Downloader {
                 for (int read = in.read(buffer); read > 0; read = in.read(buffer)) {
                     out.write(buffer, 0, read);
                     written += read;
-                    if (progress != null && written - lastReport > (1 << 20)) {
+                    if ((progress != null || transferProgress != null) && written - lastReport > (1 << 20)) {
                         lastReport = written;
-                        progress.accept(total > 0 ? written / (float) total : -1f);
+                        if (progress != null) progress.accept(total > 0 ? written / (float) total : -1f);
+                        if (transferProgress != null) transferProgress.onProgress(written, total);
                     }
                 }
             }
