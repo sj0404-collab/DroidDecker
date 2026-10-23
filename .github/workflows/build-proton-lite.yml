@@ -1,0 +1,119 @@
+name: Build Proton Lite download
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: New component release tag (never reuse an existing tag)
+        required: true
+        default: proton-arm64-lite-r1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: proton-lite-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  repack:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^proton-arm64-lite-r[1-9][0-9]*$ ]] || {
+            echo "::error::release_tag must be proton-arm64-lite-rN"; exit 1;
+          }
+          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $RELEASE_TAG already exists; use a new rN tag"; exit 1
+          fi
+
+      - name: Install zstd
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zstd
+
+      - name: Download and verify the pinned Proton Experimental archive
+        env:
+          SOURCE_URL: https://github.com/Droid-Deck/DroidDeck-Components/releases/download/steam-proton-arm64-25502785/proton-experimental-arm64-25502785.tar.zst
+          SOURCE_SHA256: d6c480a90d981801be0906a3f3418eb9bd9461c30e411140951cb0daf9d2a189
+          SOURCE_SIZE: "398113534"
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          curl -fsSL --retry 5 --retry-all-errors "$SOURCE_URL" -o "$RUNNER_TEMP/proton-full.tar.zst"
+          test "$(stat -c %s "$RUNNER_TEMP/proton-full.tar.zst")" = "$SOURCE_SIZE"
+          echo "$SOURCE_SHA256  $RUNNER_TEMP/proton-full.tar.zst" | sha256sum -c -
+          zstd -t "$RUNNER_TEMP/proton-full.tar.zst"
+
+      - name: Recompress the identical archive with high compression
+        env:
+          SOURCE_SHA256: d6c480a90d981801be0906a3f3418eb9bd9461c30e411140951cb0daf9d2a189
+          SOURCE_SIZE: "398113534"
+        run: |
+          set -euo pipefail
+          source_tar="$RUNNER_TEMP/proton-full.tar.zst"
+          lite_tar="$GITHUB_WORKSPACE/out/proton-experimental-arm64-lite-25502785.tar.zst"
+          zstd -dc "$source_tar" | zstd -T0 -19 -o "$lite_tar"
+          zstd -t "$lite_tar"
+          source_tree_sha=$(zstd -dc "$source_tar" | sha256sum | awk '{print $1}')
+          lite_tree_sha=$(zstd -dc "$lite_tar" | sha256sum | awk '{print $1}')
+          test "$source_tree_sha" = "$lite_tree_sha"
+          lite_size=$(stat -c %s "$lite_tar")
+          if [ "$lite_size" -ge "$SOURCE_SIZE" ]; then
+            echo "::error::high-compression archive ($lite_size bytes) is not smaller than source ($SOURCE_SIZE bytes)"
+            exit 1
+          fi
+          sha256sum "$lite_tar" | awk '{print $1}' > out/SHA256SUMS
+          {
+            echo "### Proton Experimental ARM64 — Lite download"
+            echo
+            echo "- Lite archive: $lite_size bytes"
+            echo "- Original archive: $SOURCE_SIZE bytes"
+            echo "- Decompressed tar SHA-256 (both archives): $source_tree_sha"
+            echo "- The archive contains the exact same files as the pinned source; only Zstandard compression level 19 differs. Installed size and Proton features are unchanged."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proton-arm64-lite-${{ inputs.release_tag }}
+          path: |
+            out/proton-experimental-arm64-lite-25502785.tar.zst
+            out/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the versioned Proton Lite download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          SOURCE_SHA256: d6c480a90d981801be0906a3f3418eb9bd9461c30e411140951cb0daf9d2a189
+          SOURCE_SIZE: "398113534"
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          # Proton Experimental ARM64 — Lite download
+
+          This release uses the pinned Proton Experimental ARM64 archive from Droid-Deck/DroidDeck-Components and recompresses the exact same tar stream using Zstandard level 19. The workflow verifies the source checksum, tests the compressed archive, and compares the SHA-256 of the decompressed streams.
+
+          No Proton files, DLLs, languages, or runtime components are removed. The Lite asset reduces download bytes only; its installed size and compatibility are unchanged. Source archive SHA-256: $SOURCE_SHA256 ($SOURCE_SIZE bytes).
+
+          This is a separately versioned component asset, not an APK release. It has not been tested on a physical device.
+          EOF
+          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Proton Experimental ARM64 Lite download ${RELEASE_TAG#proton-arm64-lite-}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease
+          gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" \
+            out/proton-experimental-arm64-lite-25502785.tar.zst out/SHA256SUMS
+          echo "Published component asset: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
