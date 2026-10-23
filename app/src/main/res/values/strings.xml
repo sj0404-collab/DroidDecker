@@ -1370,6 +1370,13 @@
     <string name="session_desktop_unpacking">unpacking the desktop</string>
     <string name="session_proton_downloading">downloading Proton Experimental (ARM64)</string>
     <string name="session_proton_downloading_mb">downloading Proton Experimental (ARM64) · %1$d of %2$d MB</string>
+    <string name="session_proton_progress">Proton · %1$s/%2$s B · %3$d%% · %4$s · ETA %5$s</string>
+    <string name="session_transfer_speed_mb">%1$.1f MB/s</string>
+    <string name="session_transfer_speed_kb">%1$.0f KB/s</string>
+    <string name="session_transfer_speed_measuring">measuring speed…</string>
+    <string name="session_transfer_eta_measuring">estimating…</string>
+    <string name="session_transfer_eta_minutes">%1$d:%2$02d</string>
+    <string name="session_transfer_eta_hours">%1$dh %2$02dm</string>
     <string name="session_proton_checking">checking Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">unpacking Proton Experimental (ARM64)</string>
     <string name="session_runtime_catalog_unreachable">Could not reach the runtime catalog. Check the connection and press Play again.</string>

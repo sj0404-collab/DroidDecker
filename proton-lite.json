@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "packages": [
+    {
+      "id": "proton-arm64",
+      "name": "Proton Experimental ARM64 (Lite download)",
+      "tier": 1,
+      "version": "25502785-lite-r1",
+      "kind": "tar",
+      "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/proton-arm64-lite-r1/proton-experimental-arm64-lite-25502785.tar.zst",
+      "sha256": "343a24d888bcdb3d1b57a78f8ed313a1b4026d558243f0aebfb6fd1cbf96efdf",
+      "size": 338979118,
+      "notes": "Same Proton Experimental ARM64 files and features as the pinned upstream archive, recompressed for a smaller download. Installed size is unchanged."
+    }
+  ]
+}

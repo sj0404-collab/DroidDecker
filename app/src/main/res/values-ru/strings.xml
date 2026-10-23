@@ -1366,6 +1366,13 @@
     <string name="session_desktop_unpacking">распаковка рабочего стола</string>
     <string name="session_proton_downloading">загрузка Proton Experimental (ARM64)</string>
     <string name="session_proton_downloading_mb">загрузка Proton Experimental (ARM64) · %1$d из %2$d МБ</string>
+    <string name="session_proton_progress">Proton · %1$s/%2$s байт · %3$d%% · %4$s · осталось %5$s</string>
+    <string name="session_transfer_speed_mb">%1$.1f МБ/с</string>
+    <string name="session_transfer_speed_kb">%1$.0f КБ/с</string>
+    <string name="session_transfer_speed_measuring">измерение скорости…</string>
+    <string name="session_transfer_eta_measuring">расчёт…</string>
+    <string name="session_transfer_eta_minutes">%1$d:%2$02d</string>
+    <string name="session_transfer_eta_hours">%1$d ч %2$02d мин</string>
     <string name="session_proton_checking">проверка Proton Experimental (ARM64)</string>
     <string name="session_proton_unpacking">распаковка Proton Experimental (ARM64)</string>
     <string name="session_runtime_catalog_unreachable">Не удалось получить каталог сред выполнения. Проверьте подключение и снова нажмите Play.</string>

@@ -20,7 +20,7 @@ import org.junit.Test
  * can promise the whole file and then hang up halfway.
  */
 class DownloaderResumeTest {
-    private val data = ByteArray(300_000) { (it % 251).toByte() }
+    private val data = ByteArray(2_500_000) { (it % 251).toByte() }
     private val cutAt = 100_000
     private val requests = CopyOnWriteArrayList<String?>()
     private lateinit var server: ServerSocket
@@ -84,6 +84,20 @@ class DownloaderResumeTest {
             out.write(content, from, rest)
             out.flush()
         }
+    }
+
+    @Test fun detailedDownloadReportsCompletedAndTotalByteCounts() {
+        val url = "http://127.0.0.1:${server.localPort}/runtime.tar.zst"
+        val target = File(dir, "detailed.tar.zst")
+        val samples = CopyOnWriteArrayList<Pair<Long, Long>>()
+
+        assertTrue(Downloader.downloadFileDetailed(url, target, false, null) { done, total ->
+            samples.add(done to total)
+        })
+        assertArrayEquals(data, target.readBytes())
+        assertTrue("the listener should receive live progress and a final sample", samples.size > 1)
+        assertEquals(data.size.toLong(), samples.last().first)
+        assertEquals(data.size.toLong(), samples.last().second)
     }
 
     @Test fun cutOffDownloadResumesFromWhatWasKept() {

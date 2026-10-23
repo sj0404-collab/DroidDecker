@@ -1347,24 +1347,85 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
         val topic: LoadingState.Topic, val checkingReadable: Boolean,
     )
 
-    private fun progressFor(what: PackageLines, mb: Long) = object : com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.ProgressListener {
-        override fun onProgress(stage: String, percent: Int) =
-            onProgress(com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.OTHER, stage, percent)
+    private fun progressFor(
+        what: PackageLines,
+        mb: Long,
+        preciseTransfer: Boolean = false,
+        expectedBytes: Long = mb * 1_000_000L,
+    ) =
+        object : com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.ProgressListener {
+            private var previousAt = 0L
+            private var previousBytes = 0L
+            private var smoothedBytesPerSecond = 0.0
+            private var lastUiAt = 0L
 
-        override fun onProgress(step: com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step, stage: String, percent: Int) {
-            uiHandler.post {
-                loading.percent = percent
-                when (step) {
-                    com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.DOWNLOADING -> loading.say(
-                        if (percent >= 0 && mb > 0) getString(what.downloadingMb, percent * mb / 100, mb) else getString(what.downloading),
-                        what.topic, readable = true,
-                    )
-                    com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.VERIFYING ->
-                        loading.say(getString(what.checking), what.topic, what.checkingReadable)
-                    else -> loading.say(getString(what.unpacking), what.topic, readable = true)
+            override fun onProgress(stage: String, percent: Int) =
+                onProgress(com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.OTHER, stage, percent)
+
+            override fun onProgress(step: com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step, stage: String, percent: Int) {
+                uiHandler.post {
+                    loading.percent = percent
+                    when (step) {
+                        com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.DOWNLOADING -> loading.say(
+                            if (percent >= 0 && mb > 0) getString(what.downloadingMb, percent * mb / 100, mb) else getString(what.downloading),
+                            what.topic, readable = true,
+                        )
+                        com.droiddeck.launcher.runtime.LinuxRuntimeInstaller.Step.VERIFYING ->
+                            loading.say(getString(what.checking), what.topic, what.checkingReadable)
+                        else -> loading.say(getString(what.unpacking), what.topic, readable = true)
+                    }
+                }
+            }
+
+            override fun onTransfer(stage: String, bytesDone: Long, bytesTotal: Long) {
+                if (!preciseTransfer) return
+                val now = SystemClock.elapsedRealtime()
+                if (previousAt > 0L && now > previousAt && bytesDone >= previousBytes) {
+                    val instant = (bytesDone - previousBytes) * 1000.0 / (now - previousAt)
+                    if (instant > 0.0) smoothedBytesPerSecond =
+                        if (smoothedBytesPerSecond <= 0.0) instant else smoothedBytesPerSecond * 0.72 + instant * 0.28
+                } else if (bytesDone < previousBytes) {
+                    smoothedBytesPerSecond = 0.0
+                }
+                previousAt = now
+                previousBytes = bytesDone
+
+                val total = if (bytesTotal > 0L) bytesTotal else expectedBytes
+                if (total <= 0L) return
+                val done = bytesDone.coerceIn(0L, total)
+                val percent = ((done * 100L) / total).toInt().coerceIn(0, 100)
+                if (now - lastUiAt < 250L && percent < 100) return
+                lastUiAt = now
+
+                val speedText = when {
+                    smoothedBytesPerSecond >= 1_000_000.0 -> getString(R.string.session_transfer_speed_mb, smoothedBytesPerSecond / 1_000_000.0)
+                    smoothedBytesPerSecond > 0.0 -> getString(R.string.session_transfer_speed_kb, smoothedBytesPerSecond / 1_000.0)
+                    else -> getString(R.string.session_transfer_speed_measuring)
+                }
+                val etaText = if (smoothedBytesPerSecond > 0.0 && done < total) {
+                    formatTransferEta(((total - done) / smoothedBytesPerSecond).toLong().coerceAtLeast(0L))
+                } else getString(R.string.session_transfer_eta_measuring)
+                val line = getString(
+                    R.string.session_proton_progress,
+                    formatTransferBytes(done),
+                    formatTransferBytes(total),
+                    percent,
+                    speedText,
+                    etaText,
+                )
+                uiHandler.post {
+                    loading.percent = percent
+                    loading.say(line, what.topic, readable = true)
                 }
             }
         }
+
+    private fun formatTransferBytes(bytes: Long): String =
+        java.text.NumberFormat.getIntegerInstance(java.util.Locale.getDefault()).format(bytes)
+
+    private fun formatTransferEta(seconds: Long): String = when {
+        seconds >= 3600L -> getString(R.string.session_transfer_eta_hours, seconds / 3600L, (seconds % 3600L) / 60L)
+        else -> getString(R.string.session_transfer_eta_minutes, seconds / 60L, seconds % 60L)
     }
 
     private fun installRuntime(): String? {
@@ -1386,9 +1447,13 @@ class SessionActivity : ComponentActivity(), SurfaceHolder.Callback {
     private fun installProton(): String? {
         uiHandler.post { loading.percent = -1; loading.say(getString(PROTON_LINES.downloading), PROTON_LINES.topic, readable = true) }
         val catalog = com.droiddeck.launcher.runtime.DesktopCatalog
-        val entry = catalog.fetch(catalog.STEAM_SEED_URL)?.firstOrNull { it.id == catalog.PROTON_SEED_ID }
+        val entry = catalog.fetch(catalog.PROTON_LITE_URL)?.firstOrNull { it.id == catalog.PROTON_SEED_ID }
             ?: return "catalog unreachable"
-        return catalog.install(this, entry, progressFor(PROTON_LINES, entry.size / 1_000_000))
+        return catalog.install(
+            this,
+            entry,
+            progressFor(PROTON_LINES, entry.size / 1_000_000, preciseTransfer = true, expectedBytes = entry.size),
+        )
     }
 
     override fun surfaceCreated(holder: SurfaceHolder) {

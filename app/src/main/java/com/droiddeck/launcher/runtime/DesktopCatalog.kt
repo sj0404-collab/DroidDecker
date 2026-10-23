@@ -14,6 +14,7 @@ object DesktopCatalog {
     private const val TAG = "DesktopCatalog"
     const val CATALOG_URL = "https://raw.githubusercontent.com/Droid-Deck/DroidDeck-Components/main/desktop.json"
     const val STEAM_SEED_URL = "https://raw.githubusercontent.com/Droid-Deck/DroidDeck-Components/main/steam-seed.json"
+    const val PROTON_LITE_URL = "https://raw.githubusercontent.com/sj0404-collab/DroidDecker/main/proton-lite.json"
     const val PROTON_SEED_ID = "proton-arm64"
 
     class Entry(
@@ -90,8 +91,10 @@ object DesktopCatalog {
         try {
             val downloading = context.getString(R.string.user_apps_downloading, entry.name)
             listener?.onProgress(LinuxRuntimeInstaller.Step.DOWNLOADING, downloading, 0)
-            val ok = Downloader.downloadFile(entry.url, download, true, entry.sha256) { f ->
-                listener?.onProgress(LinuxRuntimeInstaller.Step.DOWNLOADING, downloading, if (f < 0) -1 else Math.round(f * 100f))
+            val ok = Downloader.downloadFileDetailed(entry.url, download, true, entry.sha256) { bytesDone, bytesTotal ->
+                val percent = if (bytesTotal > 0L) ((bytesDone * 100L) / bytesTotal).toInt().coerceIn(0, 100) else -1
+                listener?.onProgress(LinuxRuntimeInstaller.Step.DOWNLOADING, downloading, percent)
+                listener?.onTransfer(downloading, bytesDone, bytesTotal)
             }
             if (!ok) return context.getString(R.string.user_apps_download_failed)
             listener?.onProgress(LinuxRuntimeInstaller.Step.VERIFYING, context.getString(R.string.rtinst_verifying), -1)

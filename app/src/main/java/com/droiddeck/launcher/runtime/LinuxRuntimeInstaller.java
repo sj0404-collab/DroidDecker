@@ -51,6 +51,8 @@ public final class LinuxRuntimeInstaller {
         default void onProgress(Step step, String stage, int percent) {
             onProgress(stage, percent);
         }
+
+        default void onTransfer(String stage, long bytesDone, long bytesTotal) {}
     }
 
     public static final class Release {
