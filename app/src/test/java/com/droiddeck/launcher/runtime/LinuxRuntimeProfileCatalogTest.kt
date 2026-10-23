@@ -1,17 +1,11 @@
 package com.droiddeck.launcher.runtime
 
-import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
 import org.junit.Test
 
 class LinuxRuntimeProfileCatalogTest {
-    private val valid = JSONObject()
-        .put("version", "r1")
-        .put("url", "https://github.com/sj0404-collab/DroidDecker/releases/download/linuxfs-lite-r1/linuxfs.tar.zst")
-        .put("sha256", "a".repeat(64))
-        .put("size", 605348116)
-        .toString()
+    private val valid = """{"version":"r1","url":"https://github.com/sj0404-collab/DroidDecker/releases/download/linuxfs-lite-r1/linuxfs.tar.zst","sha256":"${"a".repeat(64)}","size":605348116}"""
 
     @Test
     fun liteVersionIsNamespacedSoSwitchingProfilesTriggersInstall() {
