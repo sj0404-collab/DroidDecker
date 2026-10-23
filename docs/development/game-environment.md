@@ -77,6 +77,7 @@ values. Custom variables have editable names and literal values.
 | `MESA_SHADER_CACHE_MAX_SIZE` | Storage budget for Mesa's shader cache, for example `1G`. |
 | `mesa_glthread` | OpenGL threading; test with the affected game. |
 | `DXVK_CONFIG` | DXVK configuration options; recent builds accept `dxvk.maxFrameRate = 60`. |
+| `DXVK_LOG_LEVEL` | DXVK log verbosity. Real game launches default to `warn`; a shared or per-game profile can select `none`, `error`, `warn`, `info`, or `debug`. |
 | `VKD3D_FRAME_RATE` | D3D12 frame-rate limit. |
 | `DXVK_HUD`, `PROTON_LOG` | Optional diagnostics; leave unset for ordinary play. |
 | `PROTON_USE_WINED3D` | D3D9–11 OpenGL fallback for compatibility testing. |

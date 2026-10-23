@@ -66,6 +66,13 @@ class GameEnvironmentTest {
         assertEquals("400000000", GameEnvironment.effective(config, "", "43")["DOTNET_GCRegionRange"])
     }
 
+    @Test fun dxvkLoggingChoicesMatchTheRuntimeAndDefaultToWarnings() {
+        val option = GameEnvironmentOptions.find("DXVK_LOG_LEVEL")
+        assertNotNull(option)
+        assertEquals("warn", option!!.value)
+        assertEquals(listOf("none", "error", "warn", "info", "debug"), option.choices)
+    }
+
     @Test fun multiSelectionPreservesCustomTokensAndRemovesToggledValues() {
         assertEquals("fps,custom_token,frametimes", GameEnvironmentOptions.toggle("fps,custom_token", "frametimes"))
         assertEquals("custom_token", GameEnvironmentOptions.toggle("fps,custom_token", "fps"))

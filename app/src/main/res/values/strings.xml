@@ -87,6 +87,7 @@
     <string name="game_env_fsync_first">Set to 1 to run this game on droiddeck-fsync, or 0 to put droiddeck-esync first where a pack fits its Proton.</string>
     <string name="game_env_xalia">Set to 0 to disable Proton’s gamepad-navigation helper for this game.</string>
     <string name="game_env_hud">DXVK overlay for D3D9–11. fps displays frame rate; unset hides it.</string>
+    <string name="game_env_dxvk_log_level">DXVK diagnostics: none, errors, warnings, info, or debug. New game launches default to warnings; choose another level for this profile to override it.</string>
     <string name="game_env_dxvk_config">DXVK settings separated by semicolons. Recent builds use dxvk.maxFrameRate for frame limiting; prefer the session frame limiter for ordinary play.</string>
     <string name="game_env_vkd3d_limit">D3D12 frame-rate limit. 0 disables the limit.</string>
     <string name="game_env_glthread">Mesa OpenGL threading. true can help CPU-limited OpenGL games; test per game.</string>

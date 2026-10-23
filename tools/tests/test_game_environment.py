@@ -266,20 +266,25 @@ class GameEnvironmentTest(unittest.TestCase):
             config = home / ".config/droiddeck/game-environment.json"
             config.parent.mkdir(parents=True)
             probe = home / "fake-proton"
-            probe.write_text("#!/usr/bin/python3\nimport json, os, sys\nprint(json.dumps([os.environ.get('CUSTOM'), sys.argv[1:]]))\n")
+            probe.write_text("#!/usr/bin/python3\nimport json, os, sys\nprint(json.dumps([os.environ.get('CUSTOM'), os.environ.get('DXVK_LOG_LEVEL'), sys.argv[1:]]))\n")
             probe.chmod(0o755)
             env = {**os.environ, "HOME": tmp, "STEAM_COMPAT_DATA_PATH": "/compatdata/42"}
             for value in ("first value", "$(touch " + str(home / "injected") + "); 'literal'=value"):
                 config.write_text(json.dumps({"version": 1, "shared": {"CUSTOM": value}}))
                 result = subprocess.check_output([sys.executable, str(BIN / "droiddeck-game-env"), str(probe), "waitforexitandrun", "path with spaces", "a=b"], env=env, text=True)
-                self.assertEqual(json.loads(result), [value, ["waitforexitandrun", "path with spaces", "a=b"]])
+                self.assertEqual(json.loads(result), [value, "warn", ["waitforexitandrun", "path with spaces", "a=b"]])
+            config.write_text(json.dumps({"version": 1, "shared": {"CUSTOM": "shared", "DXVK_LOG_LEVEL": "error"}, "games": {"42": {"DXVK_LOG_LEVEL": "debug"}}}))
+            result = subprocess.check_output([sys.executable, str(BIN / "droiddeck-game-env"), str(probe), "waitforexitandrun"], env=env, text=True)
+            self.assertEqual(json.loads(result)[1], "debug")
             self.assertFalse((home / "injected").exists())
             for verb, prefix in (("run", "/compatdata/42"), ("waitforexitandrun", "/compatdata/0")):
                 output = subprocess.check_output([sys.executable, str(BIN / "droiddeck-game-env"), str(probe), verb], env={**env, "STEAM_COMPAT_DATA_PATH": prefix, "CUSTOM": "original"}, text=True)
                 self.assertEqual(json.loads(output)[0], "original")
+                self.assertIsNone(json.loads(output)[1])
             config.write_text("{broken")
             result = subprocess.run([sys.executable, str(BIN / "droiddeck-game-env"), str(probe), "waitforexitandrun"], env={**env, "CUSTOM": "original"}, text=True, capture_output=True, check=True)
             self.assertEqual(json.loads(result.stdout)[0], "original")
+            self.assertEqual(json.loads(result.stdout)[1], "warn")
 
     def test_generated_valve_and_third_party_launchers_apply_configuration(self):
         with tempfile.TemporaryDirectory() as tmp:
