@@ -74,4 +74,7 @@ jobs:
     needs: cleanup
     if: ${{ always() }}
     uses: ./.github/workflows/update-catalog.yml
+    permissions:
+      contents: write
+      pull-requests: read
     secrets: inherit

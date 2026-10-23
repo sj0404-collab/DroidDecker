@@ -23,7 +23,7 @@ import java.io.IOException
 class AppUpdatesTest {
     private fun apk(versionCode: Int = 9) = AppUpdates.Apk(
         "DroidDeck.apk",
-        "https://github.com/Droid-Deck/DroidDeck-CI/releases/download/t/DroidDeck.apk",
+        "https://github.com/sj0404-collab/DroidDecker/releases/download/t/DroidDeck.apk",
         10,
         "a".repeat(64),
         "com.droiddeck.launcher",
@@ -209,8 +209,8 @@ class AppUpdatesTest {
         val raw = """
             {
               "schema": 1,
-              "sourceRepo": "Droid-Deck/DroidDeck",
-              "ciRepo": "Droid-Deck/DroidDeck-CI",
+              "sourceRepo": "sj0404-collab/DroidDecker",
+              "ciRepo": "sj0404-collab/DroidDecker",
               "stable": null,
               "preview": {
                 "tag": "main-deadbee",
@@ -221,11 +221,11 @@ class AppUpdatesTest {
                 "version": null,
                 "versionCode": 9,
                 "publishedAt": 1,
-                "url": "https://github.com/Droid-Deck/DroidDeck-CI/releases/tag/main-deadbee",
+                "url": "https://github.com/sj0404-collab/DroidDecker/releases/tag/main-deadbee",
                 "apks": {
                   "com.droiddeck.launcher": {
                     "name": "DroidDeck-main-deadbee.apk",
-                    "url": "https://github.com/Droid-Deck/DroidDeck-CI/releases/download/main-deadbee/DroidDeck-main-deadbee.apk",
+                    "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/main-deadbee/DroidDeck-main-deadbee.apk",
                     "size": 10,
                     "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                     "packageName": "com.droiddeck.launcher",
@@ -271,6 +271,30 @@ class AppUpdatesTest {
         assertEquals(2, parsed.recentPreviews.size)
         assertEquals("Duplicate", parsed.recentPreviews.first().title)
         assertEquals(newest, parsed.recentPreviews.last().commit)
+    }
+
+    @Test
+    fun publishedCatalogRejectsUpstreamRepositories() {
+        val wrongRepo = publishedCatalog().put("sourceRepo", "Droid-Deck/DroidDeck")
+        try {
+            AppUpdates.readPublishedCatalog(wrongRepo, "com.droiddeck.launcher", 123L)
+            fail("upstream catalog should be rejected")
+        } catch (_: IOException) {
+        }
+    }
+
+    @Test
+    fun publishedCatalogRejectsUpstreamDownloadUrls() {
+        val raw = publishedCatalog()
+        raw.getJSONObject("preview")
+            .getJSONObject("apks")
+            .getJSONObject("com.droiddeck.launcher")
+            .put("url", "https://github.com/Droid-Deck/DroidDeck-CI/releases/download/main-deadbee/DroidDeck.apk")
+        try {
+            AppUpdates.readPublishedCatalog(raw, "com.droiddeck.launcher", 123L)
+            fail("upstream download should be rejected")
+        } catch (_: IOException) {
+        }
     }
 
     @Test

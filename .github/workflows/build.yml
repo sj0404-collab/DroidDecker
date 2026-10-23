@@ -791,4 +791,7 @@ jobs:
     needs: announce
     if: ${{ always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.announce.result != 'skipped' }}
     uses: ./.github/workflows/update-catalog.yml
+    permissions:
+      contents: write
+      pull-requests: read
     secrets: inherit

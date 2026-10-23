@@ -322,4 +322,7 @@ jobs:
     needs: publish
     if: ${{ always() && needs.publish.result != 'skipped' }}
     uses: ./.github/workflows/update-catalog.yml
+    permissions:
+      contents: write
+      pull-requests: read
     secrets: inherit

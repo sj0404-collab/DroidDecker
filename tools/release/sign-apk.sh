@@ -64,13 +64,13 @@ certs=$("$BUILD_TOOLS/apksigner" verify --min-sdk-version 28 --print-certs "$out
 v3=$(sed -n 's/^.*Signer.* certificate SHA-256 digest: //p' <<<"$certs" | sort -u)
 if [ "$v3" != "$expected" ]; then
   echo "$certs" >&2
-  die "$variant: Android 9+ sees signer(s) [$(tr '\n' ' ' <<<"$v3")], not only DroidDeck's key $expected"
+  die "$variant: Android 9+ sees signer(s) [$(tr '\n' ' ' <<<"$v3")], not only the fork's key $expected"
 fi
 lineage=$("$BUILD_TOOLS/apksigner" lineage --in "$out" --print-certs)
 grep -q "Signer #1 in lineage certificate SHA-256 digest: $TESTKEY_SHA256" <<<"$lineage" \
   || die "$variant: the lineage does not start at the testkey - old installs could not update"
 grep -q "Signer #2 in lineage certificate SHA-256 digest: $expected" <<<"$lineage" \
-  || die "$variant: the lineage does not hand over to DroidDeck's key"
+  || die "$variant: the lineage does not hand over to the fork's key"
 rollback=$(awk '/Signer #1 in lineage/{s=1} /Signer #2 in lineage/{s=0} s && /rollback capability/' <<<"$lineage")
 grep -q false <<<"$rollback" \
   || die "$variant: the testkey kept its rollback right - a testkey-signed apk could replace this one"

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO=Droid-Deck/DroidDeck
+REPO=sj0404-collab/DroidDecker
 ENVIRONMENTS=(signing-main release)
 ALIAS=droiddeck
-OUT=${DROIDDECK_KEY_DIR:-$HOME/droiddeck-release-key}
+OUT=${DROIDDECK_KEY_DIR:-$HOME/droiddecker-signing}
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 
@@ -12,7 +12,7 @@ die() { echo "error: $*" >&2; exit 1; }
 command -v keytool >/dev/null || die "keytool not found (Termux: pkg install openjdk-17)"
 command -v gh >/dev/null || die "gh not found"
 gh auth status >/dev/null 2>&1 || die "gh is not logged in (gh auth login)"
-[ -e "$OUT/droiddeck-release.p12" ] && die "a key already exists in $OUT - there must only ever be one"
+[ -e "$OUT/droiddeck-release.p12" ] && die "a key already exists in $OUT - never generate a replacement for this fork"
 case "$OUT" in "$repo"|"$repo"/*) die "the key must not be made inside the repo" ;; esac
 for env in "${ENVIRONMENTS[@]}"; do
   gh api "repos/$REPO/environments/$env" >/dev/null 2>&1 || die "GitHub environment '$env' does not exist yet"
@@ -28,7 +28,7 @@ export KS_PW
 printf '%s\n' "$KS_PW" > "$OUT/password.txt"
 
 keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias "$ALIAS" \
-  -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=DroidDeck, O=The412Banner" \
+  -keyalg RSA -keysize 4096 -validity 10950 -dname "CN=DroidDecker, O=sj0404-collab" \
   -storepass:env KS_PW -keypass:env KS_PW >/dev/null 2>&1 || die "keytool could not make the key"
 listing=$(keytool -list -v -keystore "$KS" -storepass:env KS_PW -alias "$ALIAS")
 SHA=$(awk '/SHA256:/ { print $2 }' <<<"$listing" | head -n1 | tr -d ':' | tr 'A-F' 'a-f')
@@ -44,7 +44,7 @@ unset KS_PW
 printf '%s\n' "$SHA" > "$repo/keystore/release-signer.sha256"
 cat <<EOF
 
-DroidDeck's signing key is made and in GitHub.
+DroidDecker's fork signing key is made and in GitHub.
 
   Key:       $KS
   Password:  $OUT/password.txt
