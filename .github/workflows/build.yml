@@ -666,7 +666,7 @@ jobs:
 
   announce:
     needs: [build, sign]
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && github.repository == 'Droid-Deck/DroidDeck'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -788,8 +788,8 @@ jobs:
           echo "Posted: $content"
 
   catalog:
-    needs: announce
-    if: ${{ always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.announce.result != 'skipped' }}
+    needs: [build, sign]
+    if: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.build.result == 'success' && needs.sign.result == 'success' }}
     uses: ./.github/workflows/update-catalog.yml
     permissions:
       contents: write
