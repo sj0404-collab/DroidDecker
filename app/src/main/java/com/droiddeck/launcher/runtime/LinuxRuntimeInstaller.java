@@ -134,9 +134,9 @@ public final class LinuxRuntimeInstaller {
 
     static Release parseReleaseJson(String body, String profile) throws Exception {
         JSONObject json = new JSONObject(body);
-        String version = json.optString("version", "").trim();
-        String url = json.optString("url", "").trim();
-        String sha256 = json.optString("sha256", "").trim().toLowerCase(java.util.Locale.ROOT);
+        String version = catalogString(json, "version");
+        String url = catalogString(json, "url");
+        String sha256 = catalogString(json, "sha256").toLowerCase(java.util.Locale.ROOT);
         long size = json.optLong("size", 0L);
         if (version.isEmpty() || !version.matches("[A-Za-z0-9._-]+")) {
             throw new IllegalArgumentException("invalid runtime version");
@@ -149,6 +149,11 @@ public final class LinuxRuntimeInstaller {
         }
         if (PROFILE_LITE.equals(profile)) version = "lite-" + version;
         return new Release(version, url, sha256, size);
+    }
+
+    private static String catalogString(JSONObject json, String key) {
+        Object value = json.opt(key);
+        return value instanceof String ? ((String) value).trim() : "";
     }
 
     private static final String USER_DATA = "root";
