@@ -2,8 +2,56 @@
   "schema": 1,
   "sourceRepo": "sj0404-collab/DroidDecker",
   "ciRepo": "sj0404-collab/DroidDecker",
-  "generatedAt": 1792752166816,
-  "stable": null,
+  "generatedAt": 1792754249790,
+  "stable": {
+    "tag": "0.4.1",
+    "title": "DroidDeck 0.4.1 \u2014 experimental fork release",
+    "summary": "\u2022 Real Proton game launches default to DXVKLOGLEVEL=warn; the setting remains configurable globally or per game.\n\u2022 Built-in app updates now use releases from the sj0404-collab/DroidDecker fork and are signed with its dedicated release key.\n\u2022 This APK uses a fork-specific signing identity. It cannot update an APK signed by the official upstream key; do not install it over an official DroidDeck installation.\n\u2022 This experimental build does not add Mali, Xclipse, or PowerVR support. No Mali device testing or compatibility claim is made.",
+    "commit": "bb10404b54274f88ff4471907ee7315debdf46a4",
+    "pr": 0,
+    "version": "0.4.1",
+    "versionCode": 14,
+    "publishedAt": 1792754235000,
+    "url": "https://github.com/sj0404-collab/DroidDecker/releases/tag/0.4.1",
+    "apks": {
+      "com.droiddeck.launcher": {
+        "name": "DroidDeck-0.4.1.apk",
+        "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/0.4.1/DroidDeck-0.4.1.apk",
+        "size": 85882805,
+        "sha256": "a65c68ec5dc489cc1243ffcef0821dc1dfde2c24314899b8509a1da89508643b",
+        "packageName": "com.droiddeck.launcher",
+        "versionCode": 14,
+        "signerSha256": "b5d0519d97129d84f6a9ad5dd6c342e65f9f7d61cea23f4a2419b91f34a0fba3"
+      },
+      "com.tencent.ig": {
+        "name": "DroidDeck-0.4.1-pubg.apk",
+        "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/0.4.1/DroidDeck-0.4.1-pubg.apk",
+        "size": 85882805,
+        "sha256": "31dfeb63278cdea1a7c99ca065bd4501202ae208c01b2ce4f576007593fc7d24",
+        "packageName": "com.tencent.ig",
+        "versionCode": 14,
+        "signerSha256": "b5d0519d97129d84f6a9ad5dd6c342e65f9f7d61cea23f4a2419b91f34a0fba3"
+      },
+      "com.antutu.benchmark.full": {
+        "name": "DroidDeck-0.4.1-antutu.apk",
+        "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/0.4.1/DroidDeck-0.4.1-antutu.apk",
+        "size": 85882805,
+        "sha256": "7774f5acbbfe58f7a0b6680270a7ca2806ebd07445877cb1a0b9e2c71defbf6f",
+        "packageName": "com.antutu.benchmark.full",
+        "versionCode": 14,
+        "signerSha256": "b5d0519d97129d84f6a9ad5dd6c342e65f9f7d61cea23f4a2419b91f34a0fba3"
+      },
+      "com.ludashi.benchmark": {
+        "name": "DroidDeck-0.4.1-ludashi.apk",
+        "url": "https://github.com/sj0404-collab/DroidDecker/releases/download/0.4.1/DroidDeck-0.4.1-ludashi.apk",
+        "size": 85882805,
+        "sha256": "a69f90241d464630453aea1b3a75eae4638b46611f5b8c8fa9e608ddaa051701",
+        "packageName": "com.ludashi.benchmark",
+        "versionCode": 14,
+        "signerSha256": "b5d0519d97129d84f6a9ad5dd6c342e65f9f7d61cea23f4a2419b91f34a0fba3"
+      }
+    }
+  },
   "preview": null,
   "recentPreviews": [],
   "tests": []
