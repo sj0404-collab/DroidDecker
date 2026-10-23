@@ -1,0 +1,119 @@
+name: Build Lite Linux runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: New component release tag (never reuse an existing tag)
+        required: true
+        default: linuxfs-lite-r1
+
+permissions:
+  contents: write
+
+concurrency:
+  group: lite-linux-runtime-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Check release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^linuxfs-lite-r[1-9][0-9]*$ ]] || {
+            echo "::error::release_tag must be linuxfs-lite-rN"; exit 1;
+          }
+          if gh release view "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $RELEASE_TAG already exists; use a new rN tag"; exit 1
+          fi
+
+      - name: Checkout the pinned Linux runtime recipe
+        uses: actions/checkout@v4
+        with:
+          repository: The412Banner/winlator-contents
+          ref: 95dd441d8f0e8dbb63066e432a76580bd01b26cf
+          path: runtime-source
+          persist-credentials: false
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends curl tar zstd binutils xz-utils unzip python3 proot qemu-user-static
+
+      - name: Fetch and verify the default Adreno Turnip driver
+        env:
+          TURNIP_URL: https://github.com/The412Banner/Banners-Turnip/releases/download/v26.3.0-20260922/Turnip-v26.3.0-20260922-Linux.zip
+          TURNIP_SHA256: e1391e918198748ae21c23bd0020b1d09af02c86d70798c873b5fb5d7406ddde
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 5 --retry-all-errors "$TURNIP_URL" -o "$RUNNER_TEMP/turnip-linux.zip"
+          echo "$TURNIP_SHA256  $RUNNER_TEMP/turnip-linux.zip" | sha256sum -c -
+
+      - name: Build the trimmed base runtime
+        env:
+          TURNIP_URL: file://${{ runner.temp }}/turnip-linux.zip
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          runtime-source/linuxfs/build-base.sh "$RUNNER_TEMP/linuxfs-lite-work" "$GITHUB_WORKSPACE/out/linuxfs.tar.zst"
+          zstd -t out/linuxfs.tar.zst
+          test -s out/linuxfs-packages.txt
+          size=$(stat -c %s out/linuxfs.tar.zst)
+          full_size=790907606
+          if [ "$size" -ge "$full_size" ]; then
+            echo "::error::Lite archive ($size bytes) is not smaller than the current full runtime ($full_size bytes)"
+            exit 1
+          fi
+          sha256sum out/linuxfs.tar.zst | awk '{print $1}' > out/linuxfs.sha256
+          {
+            echo "### Lite Linux runtime candidate"
+            echo
+            echo "- Archive: $size bytes (full r9 reference: $full_size bytes compressed)"
+            echo "- SHA-256: \`$(cat out/linuxfs.sha256)\`"
+            echo "- Recipe source: [The412Banner/winlator-contents@95dd441d8f0e8dbb63066e432a76580bd01b26cf](https://github.com/The412Banner/winlator-contents/tree/95dd441d8f0e8dbb63066e432a76580bd01b26cf/linuxfs)"
+            echo "- The archive is an experimental reduced runtime; this workflow does not claim physical-device compatibility."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linuxfs-lite-${{ inputs.release_tag }}
+          path: |
+            out/linuxfs.tar.zst
+            out/linuxfs.sha256
+            out/linuxfs-packages.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish the versioned component asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          # DroidDecker Lite Linux runtime (experimental)
+
+          Reduced Arch Linux ARM runtime for the DroidDecker Steam session. This is a separate component release, not an APK release. The full runtime remains available as a fallback.
+
+          Built in GitHub Actions from the pinned [Linux runtime recipe](https://github.com/The412Banner/winlator-contents/tree/95dd441d8f0e8dbb63066e432a76580bd01b26cf/linuxfs). The recipe is GPL-3.0; corresponding source is linked above. The default Turnip archive was SHA-256 verified before the build.
+
+          The build checks the archive and records its package list and checksum. It has not been validated on a physical device; no Mali/Xclipse/PowerVR support is claimed.
+          EOF
+          gh release create "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Lite Linux runtime ${RELEASE_TAG#linuxfs-lite-}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease
+          gh release upload "$RELEASE_TAG" -R "$GITHUB_REPOSITORY" \
+            out/linuxfs.tar.zst out/linuxfs.sha256 out/linuxfs-packages.txt
+          echo "Published component asset: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
