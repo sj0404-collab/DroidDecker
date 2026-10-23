@@ -112,6 +112,6 @@ jobs:
     needs: publish
     uses: ./.github/workflows/update-catalog.yml
     permissions:
-      contents: read
+      contents: write
       pull-requests: read
     secrets: inherit

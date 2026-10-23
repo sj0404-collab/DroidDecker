@@ -451,8 +451,8 @@ def publish_catalog(source: GitHub, ci: GitHub, source_repo: str, ci_repo: str, 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source-repo", default="Droid-Deck/DroidDeck")
-    parser.add_argument("--ci-repo", default="Droid-Deck/DroidDeck-CI")
+    parser.add_argument("--source-repo", default="sj0404-collab/DroidDecker")
+    parser.add_argument("--ci-repo", default="sj0404-collab/DroidDecker")
     parser.add_argument("--path", default="catalog.json")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
