@@ -11,6 +11,8 @@ static const char *const EXTENSIONS[] = {
     "VK_EXT_robustness2", "VK_EXT_transform_feedback", "VK_EXT_custom_border_color",
     "VK_KHR_dynamic_rendering", "VK_EXT_extended_dynamic_state3", "VK_EXT_descriptor_indexing",
     "VK_KHR_timeline_semaphore", "VK_EXT_mesh_shader", "VK_KHR_ray_query",
+    "VK_KHR_maintenance5", "VK_KHR_maintenance6", "VK_KHR_load_store_op_none",
+    "VK_EXT_graphics_pipeline_library",
 };
 
 static const char *type_name(VkPhysicalDeviceType type) {

@@ -3,6 +3,8 @@ package com.droiddeck.launcher.gpu
 import com.droiddeck.launcher.gpu.GpuInfo.Family
 import com.droiddeck.launcher.gpu.GpuInfo.Support
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GpuDetectionTest {
@@ -64,6 +66,58 @@ class GpuDetectionTest {
         assertEquals("Not supported: DroidDeck needs an Adreno (Snapdragon) GPU", info(false, 0).supportText)
         assertEquals("Not an Adreno GPU", Family.NOT_ADRENO.label)
         assertEquals("Adreno 8xx", Family.A8XX.label)
+    }
+
+    @Test fun maliNamesAreReadAsMaliCarryingTheirModel() {
+        assertTrue(GpuInfo.isMaliName("Mali-G720-Immortalis MC12"))
+        assertTrue(GpuInfo.isMaliName("Immortalis-G720 MC12"))
+        assertTrue(GpuInfo.isMaliName("Mali-G76 MC4"))
+        assertFalse(GpuInfo.isMaliName("Samsung Xclipse 940"))
+        assertFalse(GpuInfo.isMaliName("Adreno (TM) 740"))
+        assertFalse(GpuInfo.isMaliName(""))
+        assertEquals(720, GpuInfo.maliModelOf("Mali-G720-Immortalis MC12"))
+        assertEquals(715, GpuInfo.maliModelOf("Mali-G715"))
+        assertEquals(925, GpuInfo.maliModelOf("Immortalis-G925 MC11"))
+        assertEquals(76, GpuInfo.maliModelOf("Mali-G76 MC4"))
+        assertEquals(57, GpuInfo.maliModelOf("Mali-G57"))
+        assertEquals(0, GpuInfo.maliModelOf("Mali"))
+        assertEquals(0, GpuInfo.maliModelOf("Xclipse 940"))
+    }
+
+    @Test fun maliGenerationsGetTheirOwnFamilyAndStayOutOfTheAdrenoOnes() {
+        assertEquals(Family.MALI_5TH, GpuInfo.maliFamilyOf(720))
+        assertEquals(Family.MALI_5TH, GpuInfo.maliFamilyOf(725))
+        assertEquals(Family.MALI_5TH, GpuInfo.maliFamilyOf(925))
+        assertEquals(Family.MALI_VALHALL, GpuInfo.maliFamilyOf(715))
+        assertEquals(Family.MALI_VALHALL, GpuInfo.maliFamilyOf(610))
+        assertEquals(Family.MALI_VALHALL, GpuInfo.maliFamilyOf(57))
+        assertEquals(Family.MALI_BIFROST, GpuInfo.maliFamilyOf(76))
+        assertEquals(Family.MALI_BIFROST, GpuInfo.maliFamilyOf(52))
+        assertEquals(Family.MALI_UNKNOWN, GpuInfo.maliFamilyOf(880))
+        assertEquals(Family.MALI_UNKNOWN, GpuInfo.maliFamilyOf(0))
+        assertTrue(GpuInfo.MALI.contains(Family.MALI_5TH))
+        assertFalse(GpuInfo.MALI.contains(Family.NOT_ADRENO))
+        assertFalse(GpuInfo.MALI.contains(Family.A7XX))
+        assertEquals(Family.NOT_ADRENO, GpuInfo.familyOf(false, 720))
+    }
+
+    @Test fun eachGpuNamesTheGuestDriverManifestItWants() {
+        val mali = GpuInfo(name = "Mali-G720-Immortalis MC12", model = 720, family = Family.MALI_5TH, soc = "", oneUi8Gen2 = false)
+        val xclipse = GpuInfo(name = "Samsung Xclipse 940", model = 0, family = Family.NOT_ADRENO, soc = "", oneUi8Gen2 = false)
+        assertEquals("mali", mali.icdKind)
+        assertEquals("xclipse", xclipse.icdKind)
+        assertEquals("", info(adreno = true, model = 740).icdKind)
+    }
+
+    @Test fun maliIsOutsideTheTestedHardwareAndSaysWhatItWouldNeed() {
+        val mali = GpuInfo("Mali-G720-Immortalis MC12", 720, Family.MALI_5TH, "", false)
+        assertTrue(mali.mali)
+        assertEquals(Support.UNSUPPORTED, mali.support)
+        assertTrue(mali.supportText.contains("PanVK"))
+        assertEquals("Mali G720/G725/G925", mali.family.label)
+        assertFalse(GpuInfo("Adreno 740", 740, Family.A7XX, "", false).mali)
+        assertEquals(Support.TESTED, GpuInfo("Adreno 740", 740, Family.A7XX, "", false).support)
+        assertEquals("Not supported: DroidDeck needs an Adreno (Snapdragon) GPU", info(false, 0).supportText)
     }
 
     @Test fun platformCodeNamesIncludingCaseAndUnknowns() {

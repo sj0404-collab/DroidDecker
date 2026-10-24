@@ -130,6 +130,50 @@ class GameEnvironmentTest(unittest.TestCase):
             subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True)
             self.assertEqual(target.read_text(), "general")
 
+    def test_a_hybrid_dxvk_keeps_each_half_on_the_build_that_owns_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            component_dir = home / ".local/share/droiddeck-components"
+            base = root / "proton"
+            arch = base / "files/lib/wine/dxvk/aarch64-windows"
+            component_dir.mkdir(parents=True)
+            arch.mkdir(parents=True)
+            (base / "version").write_text("1 build-1\n")
+            halves = {
+                "d3d9.dll": "d3d9 of 1.7.2",
+                "dxgi.dll": "dxgi of 2.7.1",
+                "d3d11.dll": "d3d11 of 2.7.1",
+                "d3d10core.dll": "d3d10core of 2.7.1",
+            }
+            sources = {}
+            for name, text in halves.items():
+                source = root / name
+                source.write_text(text)
+                sources[name] = source
+            for name in list(halves) + ["d3d8.dll", "d3d10.dll", "d3d10_1.dll"]:
+                (arch / name).write_text("shipped")
+            rows = "".join(
+                "*\tproton\tbuild-1\tdxvk\tfiles/lib/wine/dxvk/aarch64-windows/%s\t%s\t%s\n"
+                % (name, hashlib.sha256(path.read_bytes()).hexdigest(), path)
+                for name, path in sources.items()
+            ) + "".join(
+                "*\tproton\tbuild-1\tdxvk\tfiles/lib/wine/dxvk/aarch64-windows/%s\t-\t-\n" % name
+                for name in ("d3d8.dll", "d3d10.dll", "d3d10_1.dll")
+            )
+            (component_dir / "desired.tsv").write_text(rows)
+            script = COMPAT["BL_COMPONENTS_SETUP"] + '\nverb=waitforexitandrun; bl_components "$1"\n'
+            env = dict(os.environ, HOME=str(home), STEAM_COMPAT_DATA_PATH="/steam/compatdata/42")
+            subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True)
+            for name, text in halves.items():
+                self.assertEqual((arch / name).read_text(), text, name)
+            for name in ("d3d8.dll", "d3d10.dll", "d3d10_1.dll"):
+                self.assertFalse((arch / name).exists(), name)
+
+            subprocess.run(["bash", "-c", script, "test", str(base)], env=env, check=True, capture_output=True)
+            for name, text in halves.items():
+                self.assertEqual((arch / name).read_text(), text, name)
+
     def test_component_scope_matches_environment_scope_for_shortcut_ids(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -224,6 +268,33 @@ class GameEnvironmentTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 MODULE["apply_config"](env, {"version": 1, "shared": entries}, "42")
             self.assertEqual(env, {"ORIGINAL": "unchanged"})
+
+    def test_a_device_profile_is_prepended_so_anything_else_wins(self):
+        config = {"version": 1, "shared": {}, "games": {},
+                  "dxvkProfile": "dxgi.maxFrameLatency = 1", "dxvkConfig": "d3d9.samplerAnisotropy = 16"}
+        own = {"DXVK_CONFIG": "dxvk.maxFrameRate = 60; "}
+        self.assertEqual(
+            MODULE["apply_config"](own, config, "42")["DXVK_CONFIG"],
+            "dxgi.maxFrameLatency = 1; dxvk.maxFrameRate = 60; d3d9.samplerAnisotropy = 16",
+        )
+        self.assertEqual(MODULE["apply_config"]({}, config, "42")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; d3d9.samplerAnisotropy = 16")
+
+    def test_a_per_game_dxvk_config_still_beats_the_profile(self):
+        config = {"version": 1, "shared": {}, "games": {}, "dxvkProfile": "dxgi.maxFrameLatency = 1",
+                  "dxvkConfig": "d3d9.samplerAnisotropy = 16",
+                  "dxvkConfigGames": {"42": "dxgi.maxFrameLatency = 2"}}
+        self.assertEqual(MODULE["apply_config"]({}, config, "42")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; dxgi.maxFrameLatency = 2")
+        self.assertEqual(MODULE["apply_config"]({}, config, "43")["DXVK_CONFIG"],
+                         "dxgi.maxFrameLatency = 1; d3d9.samplerAnisotropy = 16")
+
+    def test_an_empty_profile_is_silent_and_an_invalid_one_is_refused(self):
+        config = {"version": 1, "shared": {}, "games": {}, "dxvkProfile": ""}
+        self.assertNotIn("DXVK_CONFIG", MODULE["apply_config"]({}, config, "42"))
+        for bad in (42, "a\0b", "x" * 8193):
+            with self.assertRaises(ValueError):
+                MODULE["apply_config"]({}, {**config, "dxvkProfile": bad}, "42")
 
     def test_texture_filtering_is_appended_to_dxvk_config(self):
         options = "d3d9.samplerAnisotropy = 16; d3d11.samplerAnisotropy = 16"

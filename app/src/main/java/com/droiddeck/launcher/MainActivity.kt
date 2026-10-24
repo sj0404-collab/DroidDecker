@@ -1446,6 +1446,10 @@ class MainActivity : ComponentActivity() {
             onDownload = { components.downloadComponent(it) },
             onRefresh = { components.refreshComponentCatalog() },
             onImport = { pickComponent.launch(InAppFilePicker.buildIntent(this, WCP_EXT, getString(R.string.comp_pick_wcp))) },
+            onHybrid = { reversed ->
+                val pid = components.compProton
+                components.componentAction(getString(R.string.comp_busy_hybrid)) { ComponentsManager.applyHybrid(this, ComponentsManager.hybridForDevice(this, reversed), pid) }
+            },
             onBack = { if (!com.droiddeck.launcher.ui.Hops.back { showComponents = false }) showComponents = false },
             games = steamGames,
             generalFexPreset = fexPreset,

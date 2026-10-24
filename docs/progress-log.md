@@ -7,6 +7,139 @@ the timeline, then lessons and backlog. Companion to the README (what the app *d
 
 ---
 
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: the app can now see the non-Adreno drivers
+
+- **Why:** `SocDrivers` could name the driver a chip needs, but nothing could fetch it: the repository
+  that publishes those drivers was not a source, so the list was always empty and every recommendation
+  resolved to null.
+- **Source added:** `The412Banner/droiddeck-nonadreno-drivers`. Its release tags are the driver ids
+  (`panvk-mali-kbase`, `panvk-mali-jm`, `-g615`, `-g720`, `-g710`, `panvk-faux123-*`,
+  `radv-xclipse`, `radv-xclipse-upstream`) and its assets are `<name>-Android.zip`, `-Linux.zip` and
+  `-Pair.zip`, the pair being the bundle `DriverBundle` splits in two. Component releases
+  (`venus.tzst`, `gamescope.tzst`) are not pairs and are ignored.
+- **Two facts checked against the repository, not assumed:** every release there is a prerelease, and
+  the existing rule dropped bundle assets from prereleases - so every PanVK pair would have been
+  dropped; and the driver releases sit at positions 16-24 of 25 below a run of component releases, so
+  15 per page never reached them. A source can now serve prereleases and ask for more pages (40 here).
+  Assets carry `sha256:` digests, so they pass the existing integrity check unchanged.
+- **`DriverPairs`:** non-Adreno keys are named and given Mali or Xclipse families instead of falling
+  through to "all Adreno", and `recommendedKey` returns the driver `GpuInfo.recommendedDriver()`
+  picked only when a complete pair for it is listed. Nothing downloaded yet means null, as before.
+- **Not changed:** the support gate, and no driver installs itself - `recommendedKey` is read by the
+  driver menu and the device report, not by `AutoDriverTrial`.
+- Tests: `NonAdrenoSourcesTest` (7) covers the classification of every asset shape, the components
+  that must be ignored, a regression check that the Turnip sources classify exactly as before, and the
+  recommendations for G720/G57/G610/G52, Midgard, Xclipse and PowerVR. `TurnipReleases.kindOf` is
+  exposed internally so the parsing - the whole risk in a new source - is testable without network.
+
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: which chip gets which driver
+
+- **Why:** nothing in the app could say which guest driver a non-Adreno device needs. `SocNames`
+  covers Qualcomm only, `DriverPairs.recommendedKey` returns null for every Mali family, and a
+  `ro.board.platform` code such as `mt6789` is not a name anybody recognises.
+- **`SocDrivers`** (new, `gpu/`): 88 platform codes - MediaTek Helio, Dimensity and Kompanio,
+  Samsung Exynos under both spellings, Google Tensor, HiSilicon Kirin, Unisoc, Rockchip - each with
+  its marketing name, the GPU documented in it, and the driver validated against it where one exists
+  (chip lists from `The412Banner/droiddeck-nonadreno-drivers` `drivers.json`). Qualcomm stays with
+  `SocNames` and `DriverPairs`.
+- **Two-step choice:** the chip first, then the GPU's architecture. Midgard (Mali-T), Bifrost
+  G31/G51/G71/G72, PowerVR and Maleoon answer `null` - no published driver, stated rather than
+  guessed, because a wrong build means a black screen with no explanation. G52/G76 are job manager,
+  G57-G925 are the kbase build, G615 and G720 have chip builds.
+- **Unvalidated builds are not recommended:** `panvk-mali-g710` is marked planned by its author, so
+  Dimensity 9000 and Tensor G2 fall back to `panvk-mali-kbase`, which was measured on a Pixel 7.
+- `GpuInfo.soc` is now filled on non-Adreno devices (it was empty) and `GpuInfo.recommendedDriver()`
+  returns the id that `DxvkHybrid.Guest.of` turns into a capability profile.
+- Tests: `SocDriversTest` (7) covers the no-driver cases, the job-manager and kbase ranges, the chip
+  overrides, the vendor labels, refusal of an unknown Mali, and an invariant walk over every driver
+  id the table can produce asserting each has a capability profile.
+- **Still missing:** the app cannot yet download those pairs. `TurnipReleases.SOURCES` has no
+  non-Adreno repository, and `DriverPair.complete` requires a display half, so a Linux-only pair such
+  as PanVK's cannot be represented. That is the next change.
+
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: what DXVK is told on a Mali device
+
+- **Why:** a hybrid answers D3D9 with 1.7.2 and D3D11 with a newer build, and both read the same
+  `DXVK_CONFIG`, so a tuning profile may only use keys all four shipped versions understand. Checked
+  against the `dxvk.conf` of 1.7.2, 1.10.3, 2.7.1 and 3.1.1: 25 options are common. `dxgi.tearFree`
+  and `dxgi.numBackBuffers` stop at 1.x, `dxvk.allowFse` starts at 2.7.1, `d3d9.samplerLodBias`
+  starts at 2.7.1 - none of them are used.
+- **`DxvkTuning`** (new, `core/`) emits six options about latency and stalls, not the picture: one
+  queued frame per swapchain for both halves (`d3d9`/`dxgi.maxFrameLatency = 1`), two shader compiler
+  threads where there are cores to spare, and "video memory" set to a quarter of unified RAM, clamped
+  to 1024-4096 MiB, so a single game cannot push the phone into swap. `d3d11.maxTessFactor` and
+  `d3d11.relaxedBarriers` are deliberately not defaults: they change what is drawn or trade
+  correctness for speed, so they stay per-game choices.
+- **Where it lands:** published as `dxvkProfile` in `game-environment.json` and applied by
+  `apply_config` in the guest script, ahead of the player's own `DXVK_CONFIG` and ahead of the texture
+  filtering options - DXVK keeps the last value for a key, so both of those still win. Per game,
+  `dxvkConfigGames` beats `dxvkConfig` as before. An empty profile is silent; an invalid one raises
+  like every other value in that file.
+- Tests: `DxvkTuningTest` (6) asserts the emitted key list, the latency, the thread and memory maths,
+  the Mali gate and the absence of every picture-changing key; `test_game_environment.py` (3 more,
+  58 total locally, `OK`) covers the precedence, the per-game case and the refusal cases.
+- Not verified on a device: the numbers are a starting point derived from how the guest and DXVK read
+  their configuration, not from measurements on Mali hardware.
+
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: the guest driver decides what the hybrid can be
+
+- **Seen in the code:** the hybrid read the phone's own Vulkan report, so on Mali it always answered
+  "no BC textures" and refused - while the driver that actually runs DXVK is the one DroidDeck
+  installs beside Proton, and `LinuxRuntime.vulkanIcd` picked the guest's ICD manifest by preferring
+  `freedreno`, which is Turnip's, whatever the GPU.
+- **Guest profiles** (`DxvkHybrid.Guest`, `Caps.forGuest`): what the published non-Adreno builds
+  report for themselves, taken from `The412Banner/droiddeck-nonadreno-drivers` (`drivers.json`, ten
+  entries) and zenithblue-oss's PanVK-kbase releases - Vulkan 1.3, BC1 RGB and BC7 at 8 bpp
+  (`PANVK_BC_AFRC=0` for exact), robustness2 proven on v9 and newer, no maintenance5 anywhere. So the
+  accurate half is 2.6.2 on `panvk-mali-kbase` / `-g720` / `-g615` / `faux123`, and 1.10.3 on
+  `panvk-mali-jm`, `panvk-mali-g710` (its author marks the profile unvalidated) and the Mali bridge.
+  Venus keeps the host's formats but loses robustness2 ("Venus doesn't offer it on most Malis"), and
+  anything not profiled keeps the phone's report as the conservative floor.
+- **Which driver is read at runtime:** the bundle the user picked (`DriverBundle.active`), else the
+  ICD manifest on disk. `pickIcd` now prefers `panfrost` on Mali and `radv` on Xclipse, then Venus,
+  then the first manifest; Adreno keeps `freedreno`. `GpuInfo.icdKind` names the GPU's choice and
+  `SessionService` passes it when exporting `VK_ICD_FILENAMES`.
+- **Not changed:** the support gate. Mali is still `UNSUPPORTED` until a guest driver is installed,
+  and the skip message now names the driver it looked at instead of only the missing capability.
+- Tests: `DxvkHybridTest` +5 (the guest decides, unproven robustness2 stays legacy, Venus, an
+  unprofiled driver, id/tag/ICD-name matching), `GpuDetectionTest` +1 (`icdKind`), new `GuestIcdTest`
+  (6 cases over `pickIcd`). Not yet on a device.
+
+## 2026-10-18 - `feat/dxvk-hybrid-mali`: one DXVK install, each half from the build that owns it
+
+- **The split** (`DxvkHybrid`): DXVK's own PE import graph keeps two halves apart - D3D8/D3D9
+  (`d3d8`, `d3d9`) and DXGI/D3D10/D3D11 (`dxgi`, `d3d11`, `d3d10core`, `d3d10`, `d3d10_1`). Nothing
+  crosses between them, and every crossing inside one (d3d8 → `Direct3DCreate9`, d3d10/d3d10_1 →
+  `D3D10CoreCreateDevice`, d3d10core → `D3D11CoreCreateDevice`, d3d11 → `CreateDXGIFactory1`) is a
+  documented export. Read off the shipped DLLs of 1.7.2, 1.10.3, 2.7.1 and 3.1.1. vkd3d-proton's
+  `d3d12` imports neither half, so a DX12 game is untouched by the split.
+- **Both directions on the components page:** old D3D9 + new D3D11 (DXVK 1.7.2 for the fast half,
+  the newest build the driver can create for the accurate one) and the reverse. Each is built into
+  an ordinary stored `.wcp` (`dxvk-hybrid-d3d9-1.7.2+d3d11-2.7.1.wcp`), so it swaps into a Proton,
+  follows one game's profile and restores to the Proton's original like any other package.
+- **What a half's build does not ship** is left out and Wine's own builtin serves that API (2.x has
+  no `d3d10`/`d3d10_1`, 1.x has no `d3d8`): six deletion rows beside the fourteen DLL rows.
+  `overlay` borrows such a DLL from the other build instead - implemented and tested, not in the UI.
+- **Mali** (`GpuInfo.mali`, families `MALI_5TH` / `MALI_VALHALL` / `MALI_BIFROST` / `MALI_UNKNOWN`):
+  Mali and Immortalis GPUs are recognised by name, HAL and vendor property, carry their model
+  (G720 → 720) and stay UNSUPPORTED with their own text - the guest driver is Turnip for Adreno
+  (#218), so this is the hybrid for the day a PanVK guest lands, and lets a Mali user build one by
+  hand now. Before a launch `ensureMaliHybrid` puts it on every Proton still on its shipped copy,
+  exactly like `ensureForcedPackages` does for Adreno 6xx.
+- **The driver decides** (`DxvkHybrid.Caps`): `textureCompressionBC` gates every build (all four
+  sources require it), 1.x needs Vulkan 1.1, 2.x needs 1.3 plus robustness2, 2.7 adds maintenance5,
+  3.x maintenance6 and load_store_op_none - `vkinfo` now reports those four extensions. A vendor
+  Mali driver (1.3.247, no BC, no robustness2) runs no build at all and is told why rather than
+  guessed at.
+- **While a game runs:** the hybrid goes through `swap`, so it queues and lands at the next launch -
+  mapped DLLs cannot change under a running process. `desired.tsv` is re-verified per file before
+  every launch, so each half stays on the build that owns it.
+- Docs: `docs/development/dxvk-hybrid-mali.md`. Tests: `DxvkHybridTest` (halves, naming, caps and
+  blocks, plans in both directions, overlay, a foreign DLL, the built bytes, rebuild, both packages
+  side by side, swap, a per-game profile, the Mali hook and its refusals), `GpuDetectionTest` (Mali
+  names, families, support text), `test_game_environment.py` (a hybrid's rows applied in the guest,
+  a second launch a no-op). Not yet on a device.
+
 ## 2026-10-10 - `feat/wincomp-auto-sources`: Windows components picked by the game's source
 
 - **Per source** (`WinCompSources`): Steam - Steamworks Shared depots from the appmanifest or the

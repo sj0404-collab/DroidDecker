@@ -507,6 +507,8 @@
     <string name="comp_refresh_to_list">Обновите, чтобы увидеть пакеты в Nightlies.</string>
     <string name="comp_nothing_new">С момента последней проверки нового нет.</string>
     <string name="comp_import_wcp">Импорт .wcp</string>
+    <string name="comp_hybrid_legacy9">Гибрид DXVK · старый D3D9, новый D3D11</string>
+    <string name="comp_hybrid_modern9">Гибрид DXVK · новый D3D9, старый D3D11</string>
     <string name="comp_restore_original">Восстановить оригинальные файлы этого Proton</string>
     <string name="comp_restore_original_body">Вернуть оригинальный %2$s для %1$s?</string>
     <string name="comp_swap">Заменить</string>
@@ -1242,6 +1244,7 @@
     <string name="android_app_open_failed_display">Не удалось открыть %1$s на экране %2$d</string>
     <string name="comp_busy_importing">Импорт</string>
     <string name="comp_busy_swapping">Замена</string>
+    <string name="comp_busy_hybrid">Сборка гибрида</string>
     <string name="comp_busy_restoring">Восстановление</string>
     <string name="comp_busy_cancelling">Отмена</string>
     <string name="comp_busy_deleting">Удаление</string>
@@ -1815,6 +1818,9 @@
     <string name="cmgr_not_stored">Не сохранено</string>
     <string name="cmgr_deleted_original">Удален оригинал %2$s из сборки %1$s.</string>
     <string name="cmgr_nightlies_only">Загрузки доступны только из выпусков Nightlies</string>
+    <string name="cmgr_hybrid_none">Гибрид недоступен: на этом драйвере запускается только одна сборка DXVK</string>
+    <string name="cmgr_hybrid_no_api">Гибрид недоступен: в отчёте Vulkan нет версии API</string>
+    <string name="cmgr_hybrid_no_bc">Гибрид недоступен: драйвер не поддерживает BC-текстуры, которые требует любая сборка DXVK</string>
     <string name="cmgr_list_predates_checksums">Этот список пакетов создан до появления контрольных сумм — обновите его и повторите попытку</string>
     <string name="cmgr_checksum_mismatch">Контрольная сумма не совпадает</string>
 
@@ -1853,6 +1859,7 @@
     <string name="gpuinfo_experimental">Экспериментально: его драйверы — тестовые сборки</string>
     <string name="gpuinfo_below_tested">Ниже проверенного оборудования (Adreno 725 и новее): может не работать</string>
     <string name="gpuinfo_unsupported">Не поддерживается: DroidDeck требует GPU Adreno (Snapdragon)</string>
+    <string name="gpuinfo_unsupported_mali">Пока не поддерживается: Mali нужен Vulkan-драйвер в гостевой системе (PanVK с декодированием BCn). Тогда DXVK работает гибридом: старая сборка отвечает за D3D9, новая — за DXGI/D3D10/D3D11</string>
 
     <string name="turnip_rate_limited">Превышен лимит запросов GitHub — повторите попытку позже</string>
     <string name="turnip_github_http">GitHub ответил HTTP %1$d</string>

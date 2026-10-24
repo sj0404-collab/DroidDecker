@@ -166,6 +166,15 @@ def apply_config(env, config, app_id, fixes=None):
             result[name] = value
         else:
             raise ValueError("invalid environment value")
+    # A device profile is laid down first: what the player wrote and what the UI chose both come
+    # after it, and the last value for a key is the one DXVK keeps.
+    profile = config.get("dxvkProfile")
+    if profile is not None:
+        if not isinstance(profile, str) or "\0" in profile or len(profile) > 8192:
+            raise ValueError("invalid dxvk profile")
+        if profile:
+            own = result.get("DXVK_CONFIG", "").strip().rstrip(";").strip()
+            result["DXVK_CONFIG"] = profile + "; " + own if own else profile
     game_dxvk = config.get("dxvkConfigGames", {})
     if not isinstance(game_dxvk, dict):
         raise ValueError("invalid game dxvk configuration")
